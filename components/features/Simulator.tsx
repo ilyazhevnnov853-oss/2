@@ -113,107 +113,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         setCoverageAnalysis(analysis);
     }, [velocityField]);
     
-    // --- Actions ---
-    
-    const calculatePlacedDiffuserPerformance = (pd: PlacedDiffuser): PerformanceResult => {
-        const model = DIFFUSER_CATALOG.find(m => m.id === pd.modelId);
-        const flowType = model ? model.modes[0].flowType : 'vertical';
-        
-        const perf = calculatePerformance(pd.modelId, flowType, pd.diameter, pd.volume);
-        
-        if (!perf || !perf.spec) {
-             const fallbackSpec = SPECS[pd.diameter] || { f0: 0, A: 0, B: 0, C: 0, D: 0, min: 0, max: 0 };
-             return { v0:0, pressure:0, noise:0, throwDist:0, spec: fallbackSpec, workzoneVelocity:0, coverageRadius:0 };
-        }
-
-        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
-            perf.v0 || 0,
-            perf.spec.A,
-            params.diffuserHeight, 
-            params.workZoneHeight,
-            flowType
-        );
-
-        return {
-            ...perf,
-            v0: perf.v0 || 0,
-            pressure: perf.pressure || 0,
-            noise: perf.noise || 0,
-            throwDist: perf.throwDist || 0,
-            workzoneVelocity,
-            coverageRadius,
-            spec: perf.spec
-        };
-    };
-
-    const addDiffuserToPlan = (xPos?: number, yPos?: number) => {
-        if (!sizeSelected || physics.error) return;
-        
-        // Auto increment index
-        const nextIndex = placedDiffusers.length > 0 
-            ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
-            : 1;
-
-        const newDiffuser: PlacedDiffuser = {
-            id: `d-${Date.now()}`,
-            index: nextIndex,
-            x: xPos !== undefined ? xPos : params.roomWidth / 2,
-            y: yPos !== undefined ? yPos : params.roomLength / 2,
-            modelId: params.modelId,
-            diameter: params.diameter,
-            volume: params.volume,
-            performance: physics
-        };
-        
-        newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
-        
-        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
-        setSelectedDiffuserId(newDiffuser.id);
-    };
-
-    const duplicateDiffuser = (id: string) => {
-        const original = placedDiffusers.find(d => d.id === id);
-        if (!original) return;
-        
-        const nextIndex = placedDiffusers.length > 0 
-            ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
-            : 1;
-
-        // Offset new position slightly (0.5m)
-        let newX = original.x + 0.5;
-        let newY = original.y + 0.5;
-        
-        // Check bounds and bounce back if outside
-        if (newX > params.roomWidth - 0.2) newX = Math.max(0, original.x - 0.5);
-        if (newY > params.roomLength - 0.2) newY = Math.max(0, original.y - 0.5);
-
-        const newDiffuser: PlacedDiffuser = {
-            ...original,
-            id: `d-${Date.now()}`,
-            index: nextIndex,
-            x: newX,
-            y: newY,
-        };
-        
-        // Performance is already calculated in original, but if room height changed it might be different in Simulator physics vs stored.
-        // However, PlacedDiffuser stores performance calculated at creation/update.
-        // We just clone it.
-        
-        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
-        setSelectedDiffuserId(newDiffuser.id);
-    };
-
-    const updateDiffuserPosition = (id: string, x: number, y: number) => {
-        setPlacedDiffusers(prev => prev.map(d => 
-            d.id === id ? { ...d, x, y } : d
-        ));
-    };
-
-    const removeDiffuser = (id: string) => {
-        setPlacedDiffusers(prev => prev.filter(d => d.id !== id));
-        if (selectedDiffuserId === id) setSelectedDiffuserId(null);
-    };
-
     // Обработка клавиатуры (Delete, Ctrl+D)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -376,6 +275,106 @@ const Simulator = ({ onBack, onHome }: any) => {
         }));
         setSizeSelected(true);
         if (!isPowerOn) setIsPowerOn(true);
+    };
+
+    // --- Top View Logic ---
+    const calculatePlacedDiffuserPerformance = (pd: PlacedDiffuser): PerformanceResult => {
+        const model = DIFFUSER_CATALOG.find(m => m.id === pd.modelId);
+        const flowType = model ? model.modes[0].flowType : 'vertical';
+        
+        const perf = calculatePerformance(pd.modelId, flowType, pd.diameter, pd.volume);
+        
+        if (!perf || !perf.spec) {
+             const fallbackSpec = SPECS[pd.diameter] || { f0: 0, A: 0, B: 0, C: 0, D: 0, min: 0, max: 0 };
+             return { v0:0, pressure:0, noise:0, throwDist:0, spec: fallbackSpec, workzoneVelocity:0, coverageRadius:0 };
+        }
+
+        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
+            perf.v0 || 0,
+            perf.spec.A,
+            params.diffuserHeight, 
+            params.workZoneHeight,
+            flowType
+        );
+
+        return {
+            ...perf,
+            v0: perf.v0 || 0,
+            pressure: perf.pressure || 0,
+            noise: perf.noise || 0,
+            throwDist: perf.throwDist || 0,
+            workzoneVelocity,
+            coverageRadius,
+            spec: perf.spec
+        };
+    };
+
+    const addDiffuserToPlan = (xPos?: number, yPos?: number) => {
+        if (!sizeSelected || physics.error) return;
+        
+        // Auto increment index
+        const nextIndex = placedDiffusers.length > 0 
+            ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
+            : 1;
+
+        const newDiffuser: PlacedDiffuser = {
+            id: `d-${Date.now()}`,
+            index: nextIndex,
+            x: xPos !== undefined ? xPos : params.roomWidth / 2,
+            y: yPos !== undefined ? yPos : params.roomLength / 2,
+            modelId: params.modelId,
+            diameter: params.diameter,
+            volume: params.volume,
+            performance: physics
+        };
+        
+        newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
+        
+        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
+        setSelectedDiffuserId(newDiffuser.id);
+    };
+
+    const duplicateDiffuser = (id: string) => {
+        const original = placedDiffusers.find(d => d.id === id);
+        if (!original) return;
+        
+        const nextIndex = placedDiffusers.length > 0 
+            ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
+            : 1;
+
+        // Offset new position slightly (0.5m)
+        let newX = original.x + 0.5;
+        let newY = original.y + 0.5;
+        
+        // Check bounds and bounce back if outside
+        if (newX > params.roomWidth - 0.2) newX = Math.max(0, original.x - 0.5);
+        if (newY > params.roomLength - 0.2) newY = Math.max(0, original.y - 0.5);
+
+        const newDiffuser: PlacedDiffuser = {
+            ...original,
+            id: `d-${Date.now()}`,
+            index: nextIndex,
+            x: newX,
+            y: newY,
+        };
+        
+        // Performance is already calculated in original, but if room height changed it might be different in Simulator physics vs stored.
+        // However, PlacedDiffuser stores performance calculated at creation/update.
+        // We just clone it.
+        
+        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
+        setSelectedDiffuserId(newDiffuser.id);
+    };
+
+    const updateDiffuserPosition = (id: string, x: number, y: number) => {
+        setPlacedDiffusers(prev => prev.map(d => 
+            d.id === id ? { ...d, x, y } : d
+        ));
+    };
+
+    const removeDiffuser = (id: string) => {
+        setPlacedDiffusers(prev => prev.filter(d => d.id !== id));
+        if (selectedDiffuserId === id) setSelectedDiffuserId(null);
     };
 
     // Update all diffusers when room params change
