@@ -102,8 +102,6 @@ const Simulator = ({ onBack, onHome }: any) => {
             params.workZoneHeight,
             0.5 // gridStep
         );
-        console.log('[VelocityField] Result:', field.length, 'rows,', field[0]?.length, 'cols');
-        
         setVelocityField(field);
     }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode]);
     
@@ -312,7 +310,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     const addDiffuserToPlan = (xPos?: number, yPos?: number) => {
         if (!sizeSelected || physics.error) return;
         
-        // Auto increment index
         const nextIndex = placedDiffusers.length > 0 
             ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
             : 1;
@@ -325,9 +322,10 @@ const Simulator = ({ onBack, onHome }: any) => {
             modelId: params.modelId,
             diameter: params.diameter,
             volume: params.volume,
-            performance: physics
+            performance: physics // This is a placeholder, strictly
         };
         
+        // Recalculate based on specific params of this diffuser
         newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
         
         setPlacedDiffusers([...placedDiffusers, newDiffuser]);
@@ -342,11 +340,9 @@ const Simulator = ({ onBack, onHome }: any) => {
             ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
             : 1;
 
-        // Offset new position slightly (0.5m)
         let newX = original.x + 0.5;
         let newY = original.y + 0.5;
         
-        // Check bounds and bounce back if outside
         if (newX > params.roomWidth - 0.2) newX = Math.max(0, original.x - 0.5);
         if (newY > params.roomLength - 0.2) newY = Math.max(0, original.y - 0.5);
 
@@ -357,10 +353,6 @@ const Simulator = ({ onBack, onHome }: any) => {
             x: newX,
             y: newY,
         };
-        
-        // Performance is already calculated in original, but if room height changed it might be different in Simulator physics vs stored.
-        // However, PlacedDiffuser stores performance calculated at creation/update.
-        // We just clone it.
         
         setPlacedDiffusers([...placedDiffusers, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
@@ -442,8 +434,6 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     // Drag and Drop Logic
     const handleDragStart = (e: React.DragEvent, modelId?: string) => {
-        // We set the modelId to transfer. 
-        // If we drag the generic "Add" button, we use the CURRENT modelId from params.
         const idToTransfer = modelId || params.modelId;
         e.dataTransfer.setData('modelId', idToTransfer);
         e.dataTransfer.effectAllowed = 'copy';
@@ -462,17 +452,13 @@ const Simulator = ({ onBack, onHome }: any) => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         
-        // Use correct scale logic if possible, or just rect based if consistent.
-        // DiffuserCanvas logic: const scaleX = width / rect.width;
-        // In Simulator, viewSize is used for canvas width/height props.
         const scaleX = viewSize.w / rect.width;
         const scaleY = viewSize.h / rect.height;
 
         const padding = 60;
-        const ppm = Math.min(
-            (viewSize.w - padding * 2) / params.roomWidth, 
-            (viewSize.h - padding * 2) / params.roomLength
-        );
+        const availW = viewSize.w - padding * 2;
+        const availH = viewSize.h - padding * 2;
+        const ppm = Math.min(availW / params.roomWidth, availH / params.roomLength);
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
@@ -515,12 +501,14 @@ const Simulator = ({ onBack, onHome }: any) => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        // Correct scaling
         const scaleX = viewSize.w / rect.width;
         const scaleY = viewSize.h / rect.height;
 
+        // Align exactly with DiffuserCanvas layout logic
         const padding = 60;
-        const ppm = Math.min((viewSize.w - padding * 2) / params.roomWidth, (viewSize.h - padding * 2) / params.roomLength);
+        const availW = viewSize.w - padding * 2;
+        const availH = viewSize.h - padding * 2;
+        const ppm = Math.min(availW / params.roomWidth, availH / params.roomLength);
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
@@ -542,7 +530,6 @@ const Simulator = ({ onBack, onHome }: any) => {
 
         addDiffuserToPlan(xMeter, yMeter);
         setDragPreview(null);
-        // setDraggingModelId(null); // Assuming this is handled or removed if not needed by local state
     };
 
     return (
