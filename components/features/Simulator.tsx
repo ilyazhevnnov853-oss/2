@@ -3,7 +3,7 @@ import {
   Play, Pause, Power, Wind, CircleDot, Fan, Thermometer, 
   Download, AlertTriangle, LayoutList, RotateCcw, Search, SlidersHorizontal,
   Menu, ArrowUpToLine, ScanLine, Calculator, CheckCircle2, XCircle, X, Home, ChevronLeft,
-  Layers, PlusCircle, Trash2, GripHorizontal, Undo2, Redo2, Copy, ChevronDown, ChevronUp, Box
+  Layers, PlusCircle, Trash2, GripHorizontal, Copy
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../constants';
@@ -23,28 +23,11 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [activeTab, setActiveTab] = useState('overview'); 
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    // Accordion State
-    const [expandedSections, setExpandedSections] = useState({
-        distributor: true,
-        room: false
-    });
-
-    const toggleSection = (section: 'distributor' | 'room') => {
-        setExpandedSections(prev => ({
-            ...prev,
-            [section]: !prev[section]
-        }));
-    };
-
     // View State
     const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
-    
-    // Drag State
-    const [draggingModelId, setDraggingModelId] = useState<string | null>(null);
     const [dragPreview, setDragPreview] = useState<{x: number, y: number, width: number, height: number} | null>(null);
-    
     const [velocityField, setVelocityField] = useState<number[][]>([]);
     const [coverageAnalysis, setCoverageAnalysis] = useState({
         totalCoverage: 0,
@@ -54,10 +37,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         draftZones: 0,
         deadZones: 0
     });
-
-    // History State
-    const [history, setHistory] = useState<PlacedDiffuser[][]>([]);
-    const [historyIndex, setHistoryIndex] = useState(-1);
 
     // Selection Tab States
     const [calcVolume, setCalcVolume] = useState<number | string>(300);
@@ -93,36 +72,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         params.diffuserHeight, 
         params.workZoneHeight
     );
-
-    // History Helpers
-    const saveToHistory = (newState: PlacedDiffuser[]) => {
-        const newHistory = history.slice(0, historyIndex + 1);
-        newHistory.push(JSON.parse(JSON.stringify(newState)));
-        setHistory(newHistory);
-        setHistoryIndex(newHistory.length - 1);
-    };
-
-    const undo = () => {
-        if (historyIndex > 0) {
-            setHistoryIndex(prev => prev - 1);
-            setPlacedDiffusers(JSON.parse(JSON.stringify(history[historyIndex - 1])));
-        }
-    };
-
-    const redo = () => {
-        if (historyIndex < history.length - 1) {
-            setHistoryIndex(prev => prev + 1);
-            setPlacedDiffusers(JSON.parse(JSON.stringify(history[historyIndex + 1])));
-        }
-    };
-
-    // Initialize History
-    useEffect(() => {
-        if (history.length === 0) {
-            setHistory([[]]);
-            setHistoryIndex(0);
-        }
-    }, []);
 
     useEffect(() => {
         if (!containerRef.current) return;
@@ -164,7 +113,8 @@ const Simulator = ({ onBack, onHome }: any) => {
         setCoverageAnalysis(analysis);
     }, [velocityField]);
     
-    // --- Top View Logic ---
+    // --- Actions ---
+    
     const calculatePlacedDiffuserPerformance = (pd: PlacedDiffuser): PerformanceResult => {
         const model = DIFFUSER_CATALOG.find(m => m.id === pd.modelId);
         const flowType = model ? model.modes[0].flowType : 'vertical';
@@ -178,10 +128,10 @@ const Simulator = ({ onBack, onHome }: any) => {
 
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
             perf.v0 || 0,
-            perf.throwDist || 0,
             perf.spec.A,
             params.diffuserHeight, 
-            params.workZoneHeight
+            params.workZoneHeight,
+            flowType
         );
 
         return {
@@ -217,9 +167,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         
         newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
         
-        const newList = [...placedDiffusers, newDiffuser];
-        setPlacedDiffusers(newList);
-        saveToHistory(newList);
+        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
     };
 
@@ -247,12 +195,11 @@ const Simulator = ({ onBack, onHome }: any) => {
             y: newY,
         };
         
-        // Recalculate performance to ensure it's fresh (though it should be same as original)
-        newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
+        // Performance is already calculated in original, but if room height changed it might be different in Simulator physics vs stored.
+        // However, PlacedDiffuser stores performance calculated at creation/update.
+        // We just clone it.
         
-        const newList = [...placedDiffusers, newDiffuser];
-        setPlacedDiffusers(newList);
-        saveToHistory(newList);
+        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
     };
 
@@ -262,18 +209,12 @@ const Simulator = ({ onBack, onHome }: any) => {
         ));
     };
 
-    const handleDiffuserDragEnd = () => {
-        saveToHistory(placedDiffusers);
-    };
-
     const removeDiffuser = (id: string) => {
-        const newList = placedDiffusers.filter(d => d.id !== id);
-        setPlacedDiffusers(newList);
-        saveToHistory(newList);
+        setPlacedDiffusers(prev => prev.filter(d => d.id !== id));
         if (selectedDiffuserId === id) setSelectedDiffuserId(null);
     };
 
-    // Обработка клавиатуры (Delete, Ctrl+D, Ctrl+Z, Ctrl+Y)
+    // Обработка клавиатуры (Delete, Ctrl+D)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (viewMode !== 'top') return;
@@ -289,23 +230,11 @@ const Simulator = ({ onBack, onHome }: any) => {
                 e.preventDefault();
                 duplicateDiffuser(selectedDiffuserId);
             }
-
-            // Undo
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                e.preventDefault();
-                undo();
-            }
-
-            // Redo
-            if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-                e.preventDefault();
-                redo();
-            }
         };
         
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [viewMode, selectedDiffuserId, placedDiffusers, historyIndex, history]);
+    }, [viewMode, selectedDiffuserId, placedDiffusers]);
 
     const togglePower = () => {
         setIsPowerOn(!isPowerOn);
@@ -330,7 +259,6 @@ const Simulator = ({ onBack, onHome }: any) => {
             });
             setSizeSelected(true);
             setPlacedDiffusers([]);
-            saveToHistory([]); // Reset history too by saving empty state
             if (!isPowerOn) setIsPowerOn(true);
             setIsPlaying(true);
         } else {
@@ -450,6 +378,15 @@ const Simulator = ({ onBack, onHome }: any) => {
         if (!isPowerOn) setIsPowerOn(true);
     };
 
+    // Update all diffusers when room params change
+    useEffect(() => {
+        setPlacedDiffusers(prev => prev.map(d => {
+            const updatedPerf = calculatePlacedDiffuserPerformance(d);
+            return { ...d, performance: updatedPerf };
+        }));
+    }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
+
+
     const handleExport = () => {
         const canvas = document.querySelector('canvas');
         if (!canvas) return;
@@ -509,13 +446,11 @@ const Simulator = ({ onBack, onHome }: any) => {
         // We set the modelId to transfer. 
         // If we drag the generic "Add" button, we use the CURRENT modelId from params.
         const idToTransfer = modelId || params.modelId;
-        setDraggingModelId(idToTransfer);
         e.dataTransfer.setData('modelId', idToTransfer);
         e.dataTransfer.effectAllowed = 'copy';
     };
 
     const handleGlobalDragEnd = () => {
-        setDraggingModelId(null);
         setDragPreview(null);
     };
 
@@ -525,24 +460,28 @@ const Simulator = ({ onBack, onHome }: any) => {
         
         if (viewMode !== 'top') return;
         
-        // Calculate preview position
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         
-        const scaleFactor = 2;
+        // Use correct scale logic if possible, or just rect based if consistent.
+        // DiffuserCanvas logic: const scaleX = width / rect.width;
+        // In Simulator, viewSize is used for canvas width/height props.
+        const scaleX = viewSize.w / rect.width;
+        const scaleY = viewSize.h / rect.height;
+
         const padding = 60;
         const ppm = Math.min(
-            (rect.width * scaleFactor - padding * 2) / params.roomWidth, 
-            (rect.height * scaleFactor - padding * 2) / params.roomLength
+            (viewSize.w - padding * 2) / params.roomWidth, 
+            (viewSize.h - padding * 2) / params.roomLength
         );
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
-        const originX = (rect.width * scaleFactor - roomPixW) / 2;
-        const originY = (rect.height * scaleFactor - roomPixL) / 2;
+        const originX = (viewSize.w - roomPixW) / 2;
+        const originY = (viewSize.h - roomPixL) / 2;
         
-        const mouseX = (e.clientX - rect.left) * scaleFactor;
-        const mouseY = (e.clientY - rect.top) * scaleFactor;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         
         let xMeter = (mouseX - originX) / ppm;
         let yMeter = (mouseY - originY) / ppm;
@@ -574,30 +513,27 @@ const Simulator = ({ onBack, onHome }: any) => {
         const droppedModelId = e.dataTransfer.getData('modelId');
         if (!droppedModelId) return;
 
-        // Calculate coordinates
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const width = rect.width;
-        const height = rect.height;
+        // Correct scaling
+        const scaleX = viewSize.w / rect.width;
+        const scaleY = viewSize.h / rect.height;
+
         const padding = 60;
-        
-        const scaleFactor = 2; // because we set canvas w/h to rect * 2
-        const ppm = Math.min((rect.width * scaleFactor - padding * 2) / params.roomWidth, (rect.height * scaleFactor - padding * 2) / params.roomLength);
+        const ppm = Math.min((viewSize.w - padding * 2) / params.roomWidth, (viewSize.h - padding * 2) / params.roomLength);
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
-        
-        const originX = (rect.width * scaleFactor - roomPixW) / 2;
-        const originY = (rect.height * scaleFactor - roomPixL) / 2;
+        const originX = (viewSize.w - roomPixW) / 2;
+        const originY = (viewSize.h - roomPixL) / 2;
 
-        const mouseX = (e.clientX - rect.left) * scaleFactor;
-        const mouseY = (e.clientY - rect.top) * scaleFactor;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
 
         let xMeter = (mouseX - originX) / ppm;
         let yMeter = (mouseY - originY) / ppm;
 
-        // Clamp
         xMeter = Math.max(0, Math.min(params.roomWidth, xMeter));
         yMeter = Math.max(0, Math.min(params.roomLength, yMeter));
 
@@ -607,7 +543,7 @@ const Simulator = ({ onBack, onHome }: any) => {
 
         addDiffuserToPlan(xMeter, yMeter);
         setDragPreview(null);
-        setDraggingModelId(null);
+        // setDraggingModelId(null); // Assuming this is handled or removed if not needed by local state
     };
 
     return (
@@ -656,183 +592,161 @@ const Simulator = ({ onBack, onHome }: any) => {
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 flex flex-col gap-6">
                     {activeTab === 'overview' ? (
                         <div className={`${isPowerOn ? 'opacity-100 pointer-events-auto' : 'opacity-100'} space-y-6`}>
-                            
-                            {/* SECTION 1: AIR DISTRIBUTOR */}
-                            <div className="border border-white/10 rounded-xl bg-white/5 overflow-hidden transition-all">
-                                <button onClick={() => toggleSection('distributor')} className="w-full flex items-center justify-between p-4 text-left hover:bg-white/5 transition-colors">
-                                    <SectionHeader icon={<Box size={14} />} title="Воздухораспределитель" />
-                                    {expandedSections.distributor ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
-                                </button>
-                                {expandedSections.distributor && (
-                                    <div className="p-4 pt-0 space-y-6 border-t border-white/5 mt-2">
-                                        {/* Series */}
-                                        <div className="mt-4">
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-2">Серия</div>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                {DIFFUSER_CATALOG.map(d => (
-                                                    <button 
-                                                        key={d.id}
-                                                        onClick={() => handleModelChange(d.id)}
-                                                        draggable
-                                                        onDragStart={(e) => handleDragStart(e, d.id)}
-                                                        onDragEnd={handleGlobalDragEnd}
-                                                        className={`p-3 rounded-xl border text-left transition-all cursor-grab active:cursor-grabbing ${params.modelId === d.id ? 'bg-blue-500/20 border-blue-500 text-blue-100' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
-                                                    >
-                                                        <div className="text-xs font-bold">{d.series}</div>
-                                                        <div className="text-[10px] opacity-60">{d.name}</div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Size */}
-                                        <div>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div className="text-[9px] font-bold text-slate-500 uppercase">Размер</div>
-                                                <div className="flex gap-1">
-                                                    <button onClick={() => setShowGrid(!showGrid)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${showGrid ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'border-white/10 text-slate-500'}`}>СЕТКА</button>
-                                                    {viewMode === 'top' && (
-                                                        <>
-                                                            <button onClick={() => setSnapToGrid(!snapToGrid)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${snapToGrid ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'border-white/10 text-slate-500'}`} title="Привязка к сетке 0.1м">🧲</button>
-                                                            <button onClick={() => setShowHeatmap(!showHeatmap)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${showHeatmap ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : 'border-white/10 text-slate-500'}`}>🗺️</button>
-                                                            <button onClick={undo} disabled={historyIndex <= 0} className={`text-[10px] px-2 py-1 rounded border transition-colors ${historyIndex > 0 ? 'bg-white/10 text-white border-white/20' : 'border-white/5 text-slate-600 cursor-not-allowed'}`} title="Отменить (Ctrl+Z)"><Undo2 size={12}/></button>
-                                                            <button onClick={redo} disabled={historyIndex >= history.length - 1} className={`text-[10px] px-2 py-1 rounded border transition-colors ${historyIndex < history.length - 1 ? 'bg-white/10 text-white border-white/20' : 'border-white/5 text-slate-600 cursor-not-allowed'}`} title="Вернуть (Ctrl+Y)"><Redo2 size={12}/></button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            
-                                            {!sizeSelected ? (
-                                                <div className="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl flex flex-col items-center animate-pulse mb-2">
-                                                    <AlertTriangle size={24} className="text-amber-500 mb-2"/>
-                                                    <span className="text-xs font-black text-amber-200 uppercase tracking-widest">Выберите типоразмер</span>
-                                                </div>
-                                            ) : null}
-
-                                            <div className={`flex flex-wrap gap-2 bg-black/20 p-2 rounded-xl border border-white/5 ${!sizeSelected ? 'opacity-50' : 'opacity-100'}`}>
-                                                {Object.keys(SPECS).map(d => {
-                                                    const isNum = !isNaN(Number(d));
-                                                    const val = isNum ? Number(d) : d;
-                                                    const isValid = calculatePerformance(params.modelId, currentMode.flowType, val, 100) !== null;
-                                                    
-                                                    if (!isValid) return null;
-
-                                                    return (
-                                                        <button 
-                                                            key={d} 
-                                                            onClick={() => handleSizeSelect(val)} 
-                                                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-white text-black border-white scale-110 shadow-lg' : 'bg-white/5 text-slate-500 border-transparent hover:bg-white/10'}`}
-                                                        >
-                                                            {d}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        {/* Flow Params */}
-                                        <div className="space-y-4 pt-2 border-t border-white/5">
-                                            <div className="text-[9px] font-bold text-slate-500 uppercase">Параметры потока</div>
-                                            <GlassSlider 
-                                                label="Расход (L0)" icon={<Fan size={14}/>}
-                                                val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч"
-                                                onChange={(v: number) => setParams(p => ({...p, volume: v}))}
-                                                gradient="from-blue-500 to-cyan-400"
-                                            />
-                                            <GlassSlider 
-                                                label="T° Притока" icon={<Thermometer size={14}/>}
-                                                val={params.temperature} min={15} max={35} step={1} unit="°C"
-                                                onChange={(v: number) => setParams(p => ({...p, temperature: v}))}
-                                                color="temp"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                            {/* 1. MODEL SELECTOR */}
+                            <div>
+                                <SectionHeader icon={<LayoutList size={14} />} title="Серия" />
+                                <div className="grid grid-cols-2 gap-2">
+                                    {DIFFUSER_CATALOG.map(d => (
+                                        <button 
+                                            key={d.id}
+                                            onClick={() => handleModelChange(d.id)}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, d.id)}
+                                            onDragEnd={handleGlobalDragEnd}
+                                            className={`p-3 rounded-xl border text-left transition-all cursor-grab active:cursor-grabbing ${params.modelId === d.id ? 'bg-blue-500/20 border-blue-500 text-blue-100' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                                        >
+                                            <div className="text-xs font-bold">{d.series}</div>
+                                            <div className="text-[10px] opacity-60">{d.name}</div>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            {/* SECTION 2: ROOM PARAMETERS */}
-                            <div className="border border-white/10 rounded-xl bg-white/5 overflow-hidden transition-all">
-                                <button onClick={() => toggleSection('room')} className="w-full flex items-center justify-between p-4 text-left hover:bg-white/5 transition-colors">
-                                    <SectionHeader icon={<ScanLine size={14} />} title="Параметры помещения" />
-                                    {expandedSections.room ? <ChevronUp size={16} className="text-slate-400"/> : <ChevronDown size={16} className="text-slate-400"/>}
-                                </button>
-                                {expandedSections.room && (
-                                    <div className="p-4 pt-0 space-y-4 border-t border-white/5 mt-2">
-                                        
-                                        <div className="grid grid-cols-3 gap-2 mt-4">
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-bold text-slate-500 uppercase">Ширина</label>
-                                                <input 
-                                                    type="number" step="0.5" min="2" max="30"
-                                                    value={params.roomWidth}
-                                                    onChange={(e) => setParams(p => ({...p, roomWidth: Number(e.target.value)}))}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-bold text-slate-500 uppercase">Длина</label>
-                                                <input 
-                                                    type="number" step="0.5" min="2" max="30"
-                                                    value={params.roomLength}
-                                                    onChange={(e) => setParams(p => ({...p, roomLength: Number(e.target.value)}))}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
-                                                />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[9px] font-bold text-slate-500 uppercase">Высота</label>
-                                                <input 
-                                                    type="number" step="0.1" min="2" max="15"
-                                                    value={params.roomHeight}
-                                                    onChange={(e) => handleRoomHeightChange(Number(e.target.value))}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
-                                                />
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="space-y-1">
-                                            <label className="text-[9px] font-bold text-slate-500 uppercase">Высота рабочей зоны (м)</label>
-                                            <input 
-                                                type="number" step="0.1"
-                                                value={params.workZoneHeight}
-                                                onChange={(e) => setParams(p => ({...p, workZoneHeight: Number(e.target.value)}))}
-                                                className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
-                                            />
-                                        </div>
-
-                                        <div className="pt-2 border-t border-white/5">
-                                             <GlassSlider 
-                                                label="T° Помещения" icon={<Home size={14}/>}
-                                                val={params.roomTemp} min={15} max={35} step={1} unit="°C"
-                                                onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))}
-                                                color="temp"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2 pt-2 border-t border-white/5">
-                                            <div className="flex items-center justify-between">
-                                                <label className="text-[9px] font-bold text-slate-500 uppercase">Размещение диффузора</label>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <span className="text-[9px] text-blue-400 font-bold uppercase">Под потолок</span>
-                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${params.isCeilingMounted ? 'bg-blue-500 border-blue-500' : 'border-slate-600'}`}>
-                                                        {params.isCeilingMounted && <CheckCircle2 size={10} className="text-white"/>}
-                                                    </div>
-                                                    <input type="checkbox" className="hidden" checked={params.isCeilingMounted} onChange={toggleCeilingMount}/>
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <ArrowUpToLine size={14} className="text-slate-500"/>
-                                                <input 
-                                                    type="number" step="0.1"
-                                                    value={params.diffuserHeight}
-                                                    disabled={params.isCeilingMounted}
-                                                    onChange={(e) => handleDiffuserHeightChange(Number(e.target.value))}
-                                                    className={`flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono ${params.isCeilingMounted ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                />
-                                                <span className="text-xs font-bold text-slate-500">м</span>
-                                            </div>
-                                        </div>
+                            {/* 2. GEOMETRY */}
+                            <div className="bg-black/20 p-4 rounded-2xl border border-white/5 space-y-4">
+                                <SectionHeader icon={<ScanLine size={14} />} title="Геометрия помещения" />
+                                
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Ширина</label>
+                                        <input 
+                                            type="number" step="0.5" min="2" max="30"
+                                            value={params.roomWidth}
+                                            onChange={(e) => setParams(p => ({...p, roomWidth: Number(e.target.value)}))}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
+                                        />
                                     </div>
-                                )}
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Длина</label>
+                                        <input 
+                                            type="number" step="0.5" min="2" max="30"
+                                            value={params.roomLength}
+                                            onChange={(e) => setParams(p => ({...p, roomLength: Number(e.target.value)}))}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Высота</label>
+                                        <input 
+                                            type="number" step="0.1" min="2" max="15"
+                                            value={params.roomHeight}
+                                            onChange={(e) => handleRoomHeightChange(Number(e.target.value))}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase">Высота рабочей зоны (м)</label>
+                                    <input 
+                                        type="number" step="0.1"
+                                        value={params.workZoneHeight}
+                                        onChange={(e) => setParams(p => ({...p, workZoneHeight: Number(e.target.value)}))}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono"
+                                    />
+                                </div>
+
+                                <div className="space-y-2 pt-2 border-t border-white/5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Размещение диффузора</label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <span className="text-[9px] text-blue-400 font-bold uppercase">Под потолок</span>
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${params.isCeilingMounted ? 'bg-blue-500 border-blue-500' : 'border-slate-600'}`}>
+                                                {params.isCeilingMounted && <CheckCircle2 size={10} className="text-white"/>}
+                                            </div>
+                                            <input type="checkbox" className="hidden" checked={params.isCeilingMounted} onChange={toggleCeilingMount}/>
+                                        </label>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <ArrowUpToLine size={14} className="text-slate-500"/>
+                                        <input 
+                                            type="number" step="0.1"
+                                            value={params.diffuserHeight}
+                                            disabled={params.isCeilingMounted}
+                                            onChange={(e) => handleDiffuserHeightChange(Number(e.target.value))}
+                                            className={`flex-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs font-mono ${params.isCeilingMounted ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        />
+                                        <span className="text-xs font-bold text-slate-500">м</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 3. DIAMETER */}
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <SectionHeader icon={<CircleDot size={14} />} title="Размер" />
+                                    <div className="flex gap-1">
+                                        <button onClick={() => setShowGrid(!showGrid)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${showGrid ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'border-white/10 text-slate-500'}`}>СЕТКА</button>
+                                        {viewMode === 'top' && (
+                                            <>
+                                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${snapToGrid ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'border-white/10 text-slate-500'}`}>🧲</button>
+                                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`text-[10px] px-2 py-1 rounded border transition-colors ${showHeatmap ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : 'border-white/10 text-slate-500'}`}>🗺️</button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                
+                                {!sizeSelected ? (
+                                    <div className="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl flex flex-col items-center animate-pulse">
+                                        <AlertTriangle size={24} className="text-amber-500 mb-2"/>
+                                        <span className="text-xs font-black text-amber-200 uppercase tracking-widest">Выберите типоразмер</span>
+                                    </div>
+                                ) : null}
+
+                                <div className={`flex flex-wrap gap-2 bg-black/20 p-2 rounded-xl border border-white/5 mt-2 ${!sizeSelected ? 'opacity-50' : 'opacity-100'}`}>
+                                    {Object.keys(SPECS).map(d => {
+                                        const isNum = !isNaN(Number(d));
+                                        const val = isNum ? Number(d) : d;
+                                        const isValid = calculatePerformance(params.modelId, currentMode.flowType, val, 100) !== null;
+                                        
+                                        if (!isValid) return null;
+
+                                        return (
+                                            <button 
+                                                key={d} 
+                                                onClick={() => handleSizeSelect(val)} 
+                                                className={`px-2 py-1.5 rounded-lg text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-white text-black border-white scale-110 shadow-lg' : 'bg-white/5 text-slate-500 border-transparent hover:bg-white/10'}`}
+                                            >
+                                                {d}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 4. CLIMATE PARAMS */}
+                            <div className="space-y-4">
+                                <SectionHeader icon={<SlidersHorizontal size={14} />} title="Микроклимат" />
+                                <GlassSlider 
+                                    label="Расход (L0)" icon={<Fan size={14}/>}
+                                    val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч"
+                                    onChange={(v: number) => setParams(p => ({...p, volume: v}))}
+                                    gradient="from-blue-500 to-cyan-400"
+                                />
+                                <div className="h-px bg-white/10 my-2"></div>
+                                <GlassSlider 
+                                    label="T° Притока" icon={<Thermometer size={14}/>}
+                                    val={params.temperature} min={15} max={35} step={1} unit="°C"
+                                    onChange={(v: number) => setParams(p => ({...p, temperature: v}))}
+                                    color="temp"
+                                />
+                                <div className="h-px bg-white/10 my-2"></div>
+                                <GlassSlider 
+                                    label="T° Помещения" icon={<Home size={14}/>}
+                                    val={params.roomTemp} min={15} max={35} step={1} unit="°C"
+                                    onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))}
+                                    color="temp"
+                                />
                             </div>
 
                             {/* ADD TO PLAN BUTTON (Top View Only) */}

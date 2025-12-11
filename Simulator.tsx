@@ -3,7 +3,7 @@ import {
   Play, Pause, Power, Wind, CircleDot, Fan, Thermometer, 
   Download, AlertTriangle, LayoutList, RotateCcw, Search, SlidersHorizontal,
   Menu, ArrowUpToLine, ScanLine, Calculator, CheckCircle2, XCircle, X, Home, ChevronLeft,
-  Layers, PlusCircle, Trash2, GripHorizontal
+  Layers, PlusCircle, Trash2, GripHorizontal, Copy
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../constants';
@@ -27,7 +27,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
-    const [dragPreview, setDragPreview] = useState<{x: number, y: number} | null>(null);
+    const [dragPreview, setDragPreview] = useState<{x: number, y: number, width: number, height: number} | null>(null);
     const [velocityField, setVelocityField] = useState<number[][]>([]);
     const [coverageAnalysis, setCoverageAnalysis] = useState({
         totalCoverage: 0,
@@ -125,12 +125,9 @@ const Simulator = ({ onBack, onHome }: any) => {
             }
             
             // Ctrl+D - дублирование выбранного диффузора
-            if (e.ctrlKey && e.key === 'd' && selectedDiffuserId) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedDiffuserId) {
                 e.preventDefault();
-                const selected = placedDiffusers.find(d => d.id === selectedDiffuserId);
-                if (selected) {
-                    addDiffuserToPlan(selected.x + 1, selected.y + 1);
-                }
+                duplicateDiffuser(selectedDiffuserId);
             }
         };
         
@@ -294,10 +291,10 @@ const Simulator = ({ onBack, onHome }: any) => {
 
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
             perf.v0 || 0,
-            perf.throwDist || 0,
             perf.spec.A,
             params.diffuserHeight, 
-            params.workZoneHeight
+            params.workZoneHeight,
+            flowType
         );
 
         return {
@@ -332,6 +329,34 @@ const Simulator = ({ onBack, onHome }: any) => {
         };
         
         newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
+        
+        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
+        setSelectedDiffuserId(newDiffuser.id);
+    };
+
+    const duplicateDiffuser = (id: string) => {
+        const original = placedDiffusers.find(d => d.id === id);
+        if (!original) return;
+        
+        const nextIndex = placedDiffusers.length > 0 
+            ? Math.max(...placedDiffusers.map(d => d.index)) + 1 
+            : 1;
+
+        // Offset new position slightly (0.5m)
+        let newX = original.x + 0.5;
+        let newY = original.y + 0.5;
+        
+        // Check bounds and bounce back if outside
+        if (newX > params.roomWidth - 0.2) newX = Math.max(0, original.x - 0.5);
+        if (newY > params.roomLength - 0.2) newY = Math.max(0, original.y - 0.5);
+
+        const newDiffuser: PlacedDiffuser = {
+            ...original,
+            id: `d-${Date.now()}`,
+            index: nextIndex,
+            x: newX,
+            y: newY,
+        };
         
         setPlacedDiffusers([...placedDiffusers, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
@@ -420,30 +445,38 @@ const Simulator = ({ onBack, onHome }: any) => {
         e.dataTransfer.effectAllowed = 'copy';
     };
 
+    const handleGlobalDragEnd = () => {
+        setDragPreview(null);
+    };
+
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
         
         if (viewMode !== 'top') return;
         
-        // Calculate preview position
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         
-        const scaleFactor = 2;
+        // Use correct scale logic if possible, or just rect based if consistent.
+        // DiffuserCanvas logic: const scaleX = width / rect.width;
+        // In Simulator, viewSize is used for canvas width/height props.
+        const scaleX = viewSize.w / rect.width;
+        const scaleY = viewSize.h / rect.height;
+
         const padding = 60;
         const ppm = Math.min(
-            (rect.width * scaleFactor - padding * 2) / params.roomWidth, 
-            (rect.height * scaleFactor - padding * 2) / params.roomLength
+            (viewSize.w - padding * 2) / params.roomWidth, 
+            (viewSize.h - padding * 2) / params.roomLength
         );
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
-        const originX = (rect.width * scaleFactor - roomPixW) / 2;
-        const originY = (rect.height * scaleFactor - roomPixL) / 2;
+        const originX = (viewSize.w - roomPixW) / 2;
+        const originY = (viewSize.h - roomPixL) / 2;
         
-        const mouseX = (e.clientX - rect.left) * scaleFactor;
-        const mouseY = (e.clientY - rect.top) * scaleFactor;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
         
         let xMeter = (mouseX - originX) / ppm;
         let yMeter = (mouseY - originY) / ppm;
@@ -451,7 +484,17 @@ const Simulator = ({ onBack, onHome }: any) => {
         xMeter = Math.max(0, Math.min(params.roomWidth, xMeter));
         yMeter = Math.max(0, Math.min(params.roomLength, yMeter));
         
-        setDragPreview({ x: xMeter, y: yMeter });
+        // Determine size for preview
+        let width = 0.3;
+        let height = 0.3;
+        
+        const spec = SPECS[params.diameter];
+        if (spec) {
+            width = spec.A / 1000;
+            height = (spec.B || spec.A) / 1000; 
+        }
+
+        setDragPreview({ x: xMeter, y: yMeter, width, height });
     };
     
     const handleDragLeave = () => {
@@ -465,68 +508,37 @@ const Simulator = ({ onBack, onHome }: any) => {
         const droppedModelId = e.dataTransfer.getData('modelId');
         if (!droppedModelId) return;
 
-        // Calculate coordinates
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        // We need to calculate where in the canvas we are. 
-        // This duplicates logic in DiffuserCanvas for scaling, but we need it here to pass X, Y (meters).
-        // Let's recalculate PPM.
-        const width = rect.width;
-        const height = rect.height;
+        // Correct scaling
+        const scaleX = viewSize.w / rect.width;
+        const scaleY = viewSize.h / rect.height;
+
         const padding = 60;
-        const availableW = width * 2 - padding * 2; // viewSize is 2x
-        const availableH = height * 2 - padding * 2;
-        
-        // Note: viewSize in Simulator is effectively 2x logic for canvas resolution, 
-        // but bounding client rect is 1x CSS pixels.
-        // We should map mouse position relative to the element (rect) to the internal canvas resolution logic.
-        
-        // PPM calculation logic from Canvas:
-        // const ppm = Math.min(availableW / roomWidth, availableH / roomLength);
-        
-        // Simplified approach: Pass the drop event to a handler that knows the scale? 
-        // Or reproduce logic. Let's reproduce logic carefully.
-        
-        const scaleFactor = 2; // because we set canvas w/h to rect * 2
-        const ppm = Math.min((rect.width * scaleFactor - padding * 2) / params.roomWidth, (rect.height * scaleFactor - padding * 2) / params.roomLength);
+        const ppm = Math.min((viewSize.w - padding * 2) / params.roomWidth, (viewSize.h - padding * 2) / params.roomLength);
         
         const roomPixW = params.roomWidth * ppm;
         const roomPixL = params.roomLength * ppm;
-        
-        const originX = (rect.width * scaleFactor - roomPixW) / 2;
-        const originY = (rect.height * scaleFactor - roomPixL) / 2;
+        const originX = (viewSize.w - roomPixW) / 2;
+        const originY = (viewSize.h - roomPixL) / 2;
 
-        const mouseX = (e.clientX - rect.left) * scaleFactor;
-        const mouseY = (e.clientY - rect.top) * scaleFactor;
+        const mouseX = (e.clientX - rect.left) * scaleX;
+        const mouseY = (e.clientY - rect.top) * scaleY;
 
         let xMeter = (mouseX - originX) / ppm;
         let yMeter = (mouseY - originY) / ppm;
 
-        // Clamp
         xMeter = Math.max(0, Math.min(params.roomWidth, xMeter));
         yMeter = Math.max(0, Math.min(params.roomLength, yMeter));
 
-        // If dropped model is different from current params, we should theoretically switch or just place it?
-        // Requirement: "parameter of previous one... should be saved". 
-        // We will assume that if the user drags a Model Card, they want THAT model, but with CURRENT settings (size/flow) if compatible.
-        // If not compatible, we might need a fallback.
-        // For simplicity: We only update the modelId in params if it differs, then add.
-        
         if (droppedModelId !== params.modelId) {
             handleModelChange(droppedModelId);
-            // Wait for state update? React batching might allow us to use the new ID for the new diffuser object immediately if we constructed it carefully,
-            // but `handleModelChange` is async w.r.t render.
-            // For now, to satisfy "drag from panel", we will just place the *currently configured* diffuser if dragged from the "Add" button,
-            // OR if dragged from the list, we assume the user selected it first.
-            // Let's just update the internal params to match the drop, then place.
-            
-            // Actually, simpler: just create the object with the dropped ID and current size/vol.
-            // But we need to ensure the size is valid for that model.
         }
 
         addDiffuserToPlan(xMeter, yMeter);
         setDragPreview(null);
+        // setDraggingModelId(null); // Assuming this is handled or removed if not needed by local state
     };
 
     return (
@@ -585,6 +597,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                                             onClick={() => handleModelChange(d.id)}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, d.id)}
+                                            onDragEnd={handleGlobalDragEnd}
                                             className={`p-3 rounded-xl border text-left transition-all cursor-grab active:cursor-grabbing ${params.modelId === d.id ? 'bg-blue-500/20 border-blue-500 text-blue-100' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
                                         >
                                             <div className="text-xs font-bold">{d.series}</div>
@@ -737,6 +750,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                                      <button 
                                         draggable
                                         onDragStart={handleDragStart}
+                                        onDragEnd={handleGlobalDragEnd}
                                         onClick={() => addDiffuserToPlan()}
                                         disabled={!sizeSelected || !!physics.error}
                                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-grab active:cursor-grabbing"
@@ -754,9 +768,14 @@ const Simulator = ({ onBack, onHome }: any) => {
                                 <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl animate-in fade-in">
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-xs font-bold text-blue-300">ВЫБРАННЫЙ ЭЛЕМЕНТ</span>
-                                        <button onClick={() => removeDiffuser(selectedDiffuserId)} className="text-red-400 hover:text-red-300 p-1">
-                                            <Trash2 size={14}/>
-                                        </button>
+                                        <div className="flex gap-1">
+                                            <button onClick={() => duplicateDiffuser(selectedDiffuserId)} className="text-blue-400 hover:text-blue-300 p-1" title="Дублировать (Ctrl+D)">
+                                                <Copy size={14}/>
+                                            </button>
+                                            <button onClick={() => removeDiffuser(selectedDiffuserId)} className="text-red-400 hover:text-red-300 p-1" title="Удалить (Delete)">
+                                                <Trash2 size={14}/>
+                                            </button>
+                                        </div>
                                     </div>
                                     {placedDiffusers.find(d => d.id === selectedDiffuserId) && (
                                         <div className="space-y-1 text-xs text-slate-300 font-mono">
