@@ -98,20 +98,14 @@ export const calculateWorkzoneVelocityAndCoverage = (
     
     // 1. ГЕОМЕТРИЯ (РАДИУС): 
     // Линейное расширение струи: R = R0 + L * k
-    // Это значение будет использоваться для отрисовки круга на виде сверху.
-    // Оно точно соответствует ширине конуса на данной высоте.
     const coverageRadius = r0 + (distanceToWorkzone * C_expansion);
     
     // 2. СКОРОСТЬ (ФИЗИКА):
-    // Формула Шепелева/Абрамовича для затухания осевой скорости турбулентной струи:
-    // Vx = V0 * (K * D0 / X)
-    // Мы НЕ ограничиваем расчет "дальнобойностью". Скорость считается честно на любом расстоянии.
-    
+    // Формула Шепелева/Абрамовича для затухания осевой скорости турбулентной струи
     let workzoneVelocity = v0;
     
     // Начальный участок струи (обычно 3-5 калибров), где скорость = V0.
-    // После него скорость начинает падать обратно пропорционально расстоянию.
-    const initialSectionLength = 3.0 * d0; // Упрощенно 3 диаметра
+    const initialSectionLength = 3.0 * d0; 
 
     if (distanceToWorkzone > initialSectionLength) {
         // Основной участок струи
@@ -119,7 +113,6 @@ export const calculateWorkzoneVelocityAndCoverage = (
         workzoneVelocity = v0 * decayFactor;
     }
     
-    // Техническое ограничение: совсем микроскопические скорости считаем нулем, чтобы не шуметь
     if (workzoneVelocity < 0.02) workzoneVelocity = 0;
 
     return { workzoneVelocity, coverageRadius };
@@ -148,7 +141,6 @@ export const useScientificSimulation = (
 
         const { v0 = 0, pressure = 0, noise = 0, throwDist = 0, spec } = perf;
 
-        // Передаем flowType, чтобы учесть форму струи
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
             v0, 
             spec.A, 
@@ -157,13 +149,12 @@ export const useScientificSimulation = (
             flowType
         );
 
-        // Учет Архимедовой силы (всплытие теплого / падение холодного воздуха)
-        // Влияет на "эффективную" дальнобойность в справочнике, но V_workzone мы считаем по осевой формуле выше
+        // Учет Архимедовой силы
         const dt = temp - roomTemp;
         let kArchimedes = 1.0;
         
         if (flowType.includes('vertical')) {
-             if (dt > 0) kArchimedes = Math.max(0.4, 1.0 - (dt * 0.05)); // Теплый воздух всплывает, дальнобойность падает
+             if (dt > 0) kArchimedes = Math.max(0.4, 1.0 - (dt * 0.05)); // Теплый воздух всплывает
              else kArchimedes = 1.0 + (Math.abs(dt) * 0.03); // Холодный падает быстрее
         }
 
@@ -174,24 +165,87 @@ export const useScientificSimulation = (
             pressure: Math.max(0, pressure),
             noise: Math.max(0, noise),
             throwDist: Math.max(0, finalThrow),
-            workzoneVelocity: Math.max(0, workzoneVelocity), // Реальная расчетная скорость
-            coverageRadius: Math.max(0, coverageRadius),     // Реальный геометрический радиус
+            workzoneVelocity: Math.max(0, workzoneVelocity), 
+            coverageRadius: Math.max(0, coverageRadius),     
             spec,
             error: null
         };
     }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
 };
 
-// --- Вспомогательные функции для совместимости ---
+// --- Вспомогательные функции (ВОССТАНОВЛЕННЫЙ ФУНКЦИОНАЛ) ---
+
 export const calculateVelocityField = (
     roomWidth: number, roomLength: number, placedDiffusers: any[], 
     diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5
 ): number[][] => {
-    // Возвращаем пустой массив для отключения Heatmap (для оптимизации), 
-    // или раскомментируйте старую логику, если она нужна
-    return []; 
+    // Рассчитываем сетку скоростей для Heatmap
+    const cols = Math.ceil(roomWidth / gridStep);
+    const rows = Math.ceil(roomLength / gridStep);
+    const field: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = c * gridStep + gridStep / 2;
+            const y = r * gridStep + gridStep / 2;
+            
+            let maxV = 0;
+            
+            // Находим максимальную скорость от всех диффузоров в этой точке (суперпозицию упрощаем до max)
+            placedDiffusers.forEach(d => {
+                const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
+                const radius = d.performance.coverageRadius;
+                
+                if (dist <= radius) {
+                    // Упрощенный профиль скорости: макс в центре, падает к краям
+                    const vCore = d.performance.workzoneVelocity;
+                    // Профиль Шлихтинга (упрощенно):
+                    const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
+                    if (vPoint > maxV) maxV = vPoint;
+                }
+            });
+            
+            field[r][c] = maxV;
+        }
+    }
+    return field; 
 };
-export const analyzeCoverage = (velocityField: number[][]) => ({
-    totalCoverage: 0, avgVelocity: 0, comfortZones: 0,
-    warningZones: 0, draftZones: 0, deadZones: 0
-});
+
+export const analyzeCoverage = (velocityField: number[][]) => {
+    let totalPoints = 0;
+    let coveredPoints = 0;
+    let totalVelocity = 0;
+    let comfortZones = 0; // 0.1 - 0.25 m/s
+    let warningZones = 0; // 0.25 - 0.5 m/s
+    let draftZones = 0;   // > 0.5 m/s
+    let deadZones = 0;    // < 0.1 m/s
+
+    velocityField.forEach(row => {
+        row.forEach(v => {
+            totalPoints++;
+            if (v > 0.05) coveredPoints++; 
+            totalVelocity += v;
+
+            if (v < 0.1) deadZones++;
+            else if (v >= 0.1 && v <= 0.25) comfortZones++;
+            else if (v > 0.25 && v <= 0.5) warningZones++;
+            else if (v > 0.5) draftZones++;
+        });
+    });
+
+    if (totalPoints === 0) {
+        return {
+            totalCoverage: 0, avgVelocity: 0, comfortZones: 0,
+            warningZones: 0, draftZones: 0, deadZones: 0
+        };
+    }
+
+    return {
+        totalCoverage: (coveredPoints / totalPoints) * 100,
+        avgVelocity: totalVelocity / totalPoints,
+        comfortZones,
+        warningZones,
+        draftZones,
+        deadZones
+    };
+};
