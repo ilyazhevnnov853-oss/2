@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { BookOpen, FileText, ScrollText, ArrowRightLeft, ArrowRight, ChevronLeft, Home, Activity, Wind } from 'lucide-react';
-import { AppHeader } from '../ui/Shared';
-import { ENGINEERING_WIKI, NORMS_DB } from '../../constants';
+import { BookOpen, FileText, ScrollText, ArrowRightLeft, ArrowRight, ChevronLeft, Home, Activity, Wind, Menu, X } from 'lucide-react';
+import { ENGINEERING_WIKI, NORMS_DB } from '../../../constants';
 
 const WikiTab = ({ onRead }: any) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
@@ -126,105 +125,145 @@ const ConverterTab = () => {
     );
 };
 
+const ArticleView = ({ item, onBack }: any) => (
+    <div className="animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <div className="flex items-center gap-4 mb-8">
+            <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all font-bold text-xs uppercase tracking-widest border border-white/5">
+                <ChevronLeft size={16}/> Назад
+            </button>
+            <div className="h-px flex-1 bg-white/5"></div>
+            <span className="text-[10px] font-bold uppercase text-slate-500">{item.category}</span>
+        </div>
+
+        <div className="max-w-3xl mx-auto pb-20">
+            <h1 className="text-3xl font-black text-white mb-8">{item.title}</h1>
+            <div className="prose prose-invert prose-lg max-w-none">
+                {item.content_blocks.map((block: any, i: number) => {
+                    if (block.type === 'text') return <p key={i} className="text-slate-300 mb-6 leading-relaxed">{block.content}</p>;
+                    if (block.type === 'custom_formula') return (
+                        <div key={i} className="my-8 p-6 bg-white/5 border border-white/10 rounded-2xl flex justify-center overflow-x-auto">
+                            {block.render()}
+                        </div>
+                    );
+                    if (block.type === 'variable_list') return (
+                        <div key={i} className="grid grid-cols-1 gap-2 mb-8 bg-black/20 p-4 rounded-xl border border-white/5">
+                            {block.items.map((item: any, j: number) => (
+                                <div key={j} className="flex items-baseline justify-between text-sm border-b border-white/5 last:border-0 pb-2 last:pb-0">
+                                    <span className="font-serif italic font-bold text-slate-200">{item.symbol}</span>
+                                    <span className="text-slate-400 text-right">{item.definition}</span>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                    return null;
+                })}
+            </div>
+        </div>
+    </div>
+);
+
 const KnowledgeCenter = ({ onBack, onHome, initialSection = 'wiki' }: any) => {
     const [activeSection, setActiveSection] = useState(initialSection); 
     const [readingItem, setReadingItem] = useState<any>(null);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    const goToNextArticle = () => {
-        if (!readingItem) return;
-        const idx = ENGINEERING_WIKI.findIndex(i => i.id === readingItem.id);
-        if (idx < ENGINEERING_WIKI.length - 1) {
-            setReadingItem(ENGINEERING_WIKI[idx + 1]);
-        }
+    const handleSectionChange = (id: string) => {
+        setActiveSection(id);
+        setReadingItem(null);
+        setIsMobileMenuOpen(false);
     };
 
-    if (readingItem) {
-        return (
-            <div className="flex-1 flex flex-col h-full bg-[#050505] animate-in slide-in-from-bottom-10 fade-in duration-300 z-50">
-                 <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#0f172a]/50 backdrop-blur-md">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => setReadingItem(null)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all font-bold text-xs uppercase tracking-widest border border-white/5">
-                            <ChevronLeft size={16}/> Назад
-                        </button>
-                        <button onClick={onHome} className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors" title="Домой">
-                            <Home size={18} />
-                        </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase text-slate-500 hidden md:inline">{readingItem.category}</span>
-                        <div className="h-4 w-px bg-white/10 hidden md:block"></div>
-                        <button 
-                            onClick={goToNextArticle} 
-                            disabled={ENGINEERING_WIKI.indexOf(readingItem) === ENGINEERING_WIKI.length - 1}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all font-bold text-xs uppercase tracking-widest"
-                        >
-                            Далее <ArrowRight size={16}/>
-                        </button>
-                    </div>
-                </div>
+    return (
+        <div className="flex w-full min-h-screen bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-blue-500/30">
+            {/* AMBIENT BACKGROUND */}
+            <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
+            <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] brightness-100 contrast-150 pointer-events-none"></div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-8 md:p-12">
-                    <div className="max-w-3xl mx-auto pb-20">
-                        <h1 className="text-3xl font-black text-white mb-8">{readingItem.title}</h1>
-                        <div className="prose prose-invert prose-lg max-w-none">
-                            {readingItem.content_blocks.map((block: any, i: number) => {
-                                if (block.type === 'text') return <p key={i} className="text-slate-300 mb-6 leading-relaxed">{block.content}</p>;
-                                if (block.type === 'custom_formula') return (
-                                    <div key={i} className="my-8 p-6 bg-white/5 border border-white/10 rounded-2xl flex justify-center overflow-x-auto">
-                                        {block.render()}
-                                    </div>
-                                );
-                                if (block.type === 'variable_list') return (
-                                    <div key={i} className="grid grid-cols-1 gap-2 mb-8 bg-black/20 p-4 rounded-xl border border-white/5">
-                                        {block.items.map((item: any, j: number) => (
-                                            <div key={j} className="flex items-baseline justify-between text-sm border-b border-white/5 last:border-0 pb-2 last:pb-0">
-                                                <span className="font-serif italic font-bold text-slate-200">{item.symbol}</span>
-                                                <span className="text-slate-400 text-right">{item.definition}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                );
-                                return null;
-                            })}
+            {/* LEFT PANEL (Navigation) */}
+            <div className={`
+                fixed inset-0 z-50 bg-black/95 backdrop-blur-xl lg:static lg:bg-transparent
+                flex flex-col lg:w-[420px] h-screen shrink-0 transition-transform duration-300
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                relative z-30 p-4 pl-0 lg:pl-4
+            `}>
+                 <div className="flex-1 flex flex-col rounded-[32px] bg-[#0a0a0f]/80 backdrop-blur-2xl border border-white/5 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5">
+                    {/* Header */}
+                    <div className="p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative">
+                         <div className="flex justify-between items-center lg:hidden mb-4">
+                            <h2 className="text-lg font-bold text-white">Меню</h2>
+                            <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="flex gap-2">
+                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                    <Home size={18} />
+                                </button>
+                                <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                    <ChevronLeft size={18} />
+                                </button>
+                            </div>
+                            <div className="h-8 w-px bg-white/10"></div>
+                            
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-gradient-to-tr from-amber-600 to-orange-500 shadow-lg shadow-amber-500/20 text-white">
+                                    <BookOpen size={20} />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-black text-white leading-none tracking-tight">Справочник</h2>
+                                    <p className="text-[9px] font-bold text-amber-400 uppercase tracking-widest mt-0.5">База знаний CCJX</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        );
-    }
 
-     return (
-        <div className="flex w-full min-h-screen bg-[#050505] flex-col lg:flex-row">
-            <AppHeader 
-                title="Справочник" 
-                subtitle="База знаний CCJX"
-                icon={<BookOpen size={24} />}
-                onBack={onBack}
-                onHome={onHome}
-            />
-            <div className="px-6 pb-4 shrink-0">
-                <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5 overflow-x-auto">
-                    {[
-                        {id: 'wiki', label: 'Теория и Формулы', icon: <FileText size={16}/>},
-                        {id: 'norms', label: 'Нормы', icon: <ScrollText size={16}/>},
-                        {id: 'converter', label: 'Конвертер', icon: <ArrowRightLeft size={16}/>}
-                    ].map(tab => (
-                        <button 
-                            key={tab.id}
-                            onClick={() => setActiveSection(tab.id)}
-                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all min-w-[140px] ${activeSection === tab.id ? 'bg-amber-500 text-black shadow-lg' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-                        >
-                            {tab.icon} {tab.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative">
-                 <div className="max-w-5xl mx-auto">
-                    {activeSection === 'wiki' && <WikiTab onRead={setReadingItem} />}
-                    {activeSection === 'norms' && <NormsTab />}
-                    {activeSection === 'converter' && <ConverterTab />}
+                    {/* Navigation Items */}
+                    <div className="p-5 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
+                         {[
+                            {id: 'wiki', label: 'Теория и Формулы', icon: <FileText size={18}/>},
+                            {id: 'norms', label: 'Нормы', icon: <ScrollText size={18}/>},
+                            {id: 'converter', label: 'Конвертер', icon: <ArrowRightLeft size={18}/>}
+                        ].map(tab => (
+                            <button 
+                                key={tab.id}
+                                onClick={() => handleSectionChange(tab.id)}
+                                className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all border group relative overflow-hidden ${activeSection === tab.id ? 'bg-amber-600 text-white border-amber-500/50 shadow-[0_8px_20px_rgba(245,158,11,0.3)]' : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10 hover:text-white'}`}
+                            >
+                                <div className={`p-2 rounded-lg transition-colors ${activeSection === tab.id ? 'bg-white/20' : 'bg-black/20 group-hover:bg-white/10'}`}>
+                                    {tab.icon}
+                                </div>
+                                <span className="font-bold text-xs uppercase tracking-widest flex-1 text-left">{tab.label}</span>
+                                {activeSection === tab.id && <ChevronLeft className="rotate-180" size={16}/>}
+                            </button>
+                        ))}
+                    </div>
                  </div>
+            </div>
+
+            {/* RIGHT CONTENT AREA */}
+            <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
+                <div className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group flex flex-col">
+                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-blue-900/5 to-transparent pointer-events-none"></div>
+                    
+                    {/* Mobile Menu Toggle */}
+                    <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-blue-600 text-white shadow-lg">
+                        <Menu size={20} />
+                    </button>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-6 relative">
+                        {readingItem ? (
+                             <ArticleView item={readingItem} onBack={() => setReadingItem(null)} />
+                        ) : (
+                             <div className="max-w-5xl mx-auto pt-10">
+                                {activeSection === 'wiki' && <WikiTab onRead={setReadingItem} />}
+                                {activeSection === 'norms' && <NormsTab />}
+                                {activeSection === 'converter' && <ConverterTab />}
+                             </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

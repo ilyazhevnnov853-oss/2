@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Fan, ScanLine, Calculator, Wind, Thermometer, Home, ArrowUpToLine, Search, CheckCircle2, AlertTriangle, XCircle, Power, PlusCircle, Play, Pause, X } from 'lucide-react';
+import { Fan, ScanLine, Calculator, Wind, Thermometer, Home, ArrowUpToLine, Search, CheckCircle2, AlertTriangle, XCircle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
 import { calculatePerformance } from '../../../../hooks/useSimulation'; // Путь скорректирован
 import { GlassButton, GlassSlider, SectionHeader } from '../../../ui/Shared'; // Путь скорректирован
@@ -13,7 +13,7 @@ export const SimulatorLeftPanel = ({
     isPowerOn, togglePower, 
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
-    onHome, isMobileMenuOpen, setIsMobileMenuOpen,
+    onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
     onAddDiffuser,
     calcVolume, setCalcVolume,
     limitVelocity, setLimitVelocity,
@@ -105,26 +105,32 @@ export const SimulatorLeftPanel = ({
                         <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
                     </div>
                     
-                    <div className="flex items-center gap-3 mb-6">
-                        <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group">
-                            <Home size={18} className="group-hover:scale-110 transition-transform"/>
-                        </button>
-                        <span className="text-[10px] font-black tracking-[0.25em] uppercase text-white/20 flex-1 text-right">Settings Panel</span>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center shadow-[0_0_25px_rgba(59,130,246,0.4)] ring-1 ring-white/20">
-                            <Wind size={24} className="text-white drop-shadow-md" />
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="flex gap-2">
+                             <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group">
+                                <Home size={18} />
+                             </button>
+                             {onBack && (
+                                 <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group">
+                                    <ChevronLeft size={18} />
+                                 </button>
+                             )}
                         </div>
-                        <div>
-                            <h2 className="text-xl font-black text-white leading-none tracking-tight">AeroFlow</h2>
-                            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1.5 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"/> Simulator Pro
-                            </p>
+
+                        <div className="h-8 w-px bg-white/10"></div>
+
+                        <div className="flex items-center gap-3">
+                             <div className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-lg shadow-blue-500/20 text-white">
+                                <Wind size={20} />
+                             </div>
+                             <div>
+                                <h2 className="text-lg font-black text-white leading-none tracking-tight">HVACLAB</h2>
+                                <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest mt-0.5">Инженерный комплекс</p>
+                             </div>
                         </div>
                     </div>
 
-                    <div className="flex gap-1 mt-6 p-1 bg-black/40 rounded-xl border border-white/5">
+                    <div className="flex gap-1 mt-2 p-1 bg-black/40 rounded-xl border border-white/5">
                         <button onClick={() => setActiveTab('overview')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'overview' ? 'bg-white/10 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>Обзор</button>
                         <button onClick={() => setActiveTab('selection')} className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'selection' ? 'bg-white/10 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}>Подбор</button>
                     </div>

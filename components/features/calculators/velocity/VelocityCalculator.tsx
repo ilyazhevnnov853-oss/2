@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calculator, CircleDot, Grid } from 'lucide-react';
-import { AppHeader } from '../ui/Shared';
+import { AppHeader } from '../../../ui/Shared';
 
 const VelocityCalculator = ({ onBack, onHome }: any) => {
     const [volume, setVolume] = useState<number | string>(1000);

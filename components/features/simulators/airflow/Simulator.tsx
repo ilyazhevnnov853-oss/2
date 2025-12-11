@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Download, Menu, ArrowUpToLine, ScanLine, Layers, GripHorizontal, Grid, Share2
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
@@ -187,7 +187,9 @@ const Simulator = ({ onBack, onHome }: any) => {
                 isPowerOn={isPowerOn} togglePower={togglePower}
                 viewMode={viewMode} isPlaying={isPlaying} setIsPlaying={setIsPlaying}
                 sizeSelected={sizeSelected} setSizeSelected={setSizeSelected}
-                onHome={onHome} isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
+                onHome={onHome} 
+                onBack={onBack}
+                isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={() => addDiffuserToPlan()}
                 calcVolume={calcVolume} setCalcVolume={setCalcVolume}
                 limitVelocity={limitVelocity} setLimitVelocity={setLimitVelocity}
@@ -197,19 +199,6 @@ const Simulator = ({ onBack, onHome }: any) => {
 
             {/* --- MAIN CONTENT AREA --- */}
             <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
-                {/* FLOATING "ISLAND" BAR */}
-                <div className="absolute top-8 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 animate-in slide-in-from-top-4 duration-700">
-                    <div className="flex items-center p-1.5 rounded-full bg-[#0f1014]/80 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-                         <button onClick={() => setViewMode('side')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={14} strokeWidth={2.5}/><span>Срез</span></button>
-                        <button onClick={() => setViewMode('top')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={14} strokeWidth={2.5}/><span>План</span></button>
-                        <div className="w-px h-5 bg-white/10 mx-2"></div>
-                        <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={16} /></button>
-                        {viewMode === 'top' && <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={16} /></button>}
-                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={16} /></button>
-                    </div>
-                    <div className="w-12 h-12 rounded-full bg-[#0f1014]/80 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.5)] flex items-center justify-center text-slate-400 hover:text-white hover:scale-105 transition-all cursor-pointer group"><Share2 size={20} className="group-hover:text-blue-400"/></div>
-                </div>
-
                 {/* CANVAS */}
                 <div ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop} onDragLeave={handleDragLeave} className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
@@ -229,15 +218,17 @@ const Simulator = ({ onBack, onHome }: any) => {
                         showHeatmap={showHeatmap} velocityField={velocityField} gridStep={0.5} dragPreview={dragPreview}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                     />
-
-                    <div className="absolute bottom-8 left-8 z-30">
-                        <div className="px-5 py-2.5 rounded-full bg-black/60 backdrop-blur-xl border border-white/10 text-[10px] font-mono text-slate-400 flex items-center gap-4 shadow-xl">
-                            <span className="font-bold text-white flex items-center gap-1"><ArrowUpToLine size={12} className="text-slate-500"/> H: {params.roomHeight}m</span>
-                            <span className="w-px h-3 bg-white/20"></span>
-                            <span>Pos: {params.diffuserHeight}m</span>
-                            <span className="w-px h-3 bg-white/20"></span>
-                            <span className="text-blue-300 font-bold">{params.diameter ? `Ø${params.diameter}` : 'N/A'}</span>
-                        </div>
+                </div>
+                
+                 {/* FLOATING "ISLAND" BAR (Moved to Bottom) */}
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 animate-in slide-in-from-bottom-4 duration-700">
+                    <div className="flex items-center p-1.5 rounded-full bg-[#0f1014]/80 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
+                         <button onClick={() => setViewMode('side')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={14} strokeWidth={2.5}/><span>Срез</span></button>
+                        <button onClick={() => setViewMode('top')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={14} strokeWidth={2.5}/><span>План</span></button>
+                        <div className="w-px h-5 bg-white/10 mx-2"></div>
+                        <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={16} /></button>
+                        {viewMode === 'top' && <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={16} /></button>}
+                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={16} /></button>
                     </div>
                 </div>
             </div>

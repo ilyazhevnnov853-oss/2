@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Wind, Calculator, BookOpen, ArrowRight, FileText, ScrollText, ArrowRightLeft, ChevronLeft } from 'lucide-react';
-import Simulator from './components/features/Simulator';
-import VelocityCalculator from './components/features/VelocityCalculator';
-import KnowledgeCenter from './components/features/KnowledgeCenter';
+import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft } from 'lucide-react';
+import Simulator from './components/features/simulators/airflow/Simulator';
+import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
+import KnowledgeCenter from './components/features/knowledge/KnowledgeCenter';
 
 const App = () => {
     const [appMode, setAppMode] = useState('launcher'); 
@@ -12,7 +12,7 @@ const App = () => {
         // Init logic if needed
     }, []);
 
-    const LauncherCard = ({ onClick, icon, title, desc, color, gradient }: any) => (
+    const LauncherCard = ({ onClick, icon, title, desc, color }: any) => (
         <button 
             onClick={onClick}
             className={`group relative h-80 rounded-[40px] liquid-glass p-8 flex flex-col items-center justify-center gap-8 transition-all duration-500 hover:scale-[1.02] border border-white/5 hover:border-${color}-500/30 overflow-hidden`}
@@ -61,7 +61,6 @@ const App = () => {
         </div>
     );
 
-    // (Секции simulators, calculations, reference остаются похожими, но используют liquid-glass классы)
     const renderSimulatorsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
              <div className="flex items-center gap-6 mb-10">
@@ -76,15 +75,57 @@ const App = () => {
                         <Wind size={24} />
                     </div>
                     <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">AeroFlow</h3>
+                        <h3 className="text-2xl font-bold text-white mb-2">HVACLAB</h3>
                         <p className="text-sm text-slate-400 font-medium">Моделирование распределения воздуха в помещении</p>
                     </div>
                 </button>
             </div>
         </div>
     );
-    
-    // ... (Аналогично для других секций, сокращено для краткости, используйте структуру выше)
+
+    const renderCalculationsSection = () => (
+        <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
+             <div className="flex items-center gap-6 mb-10">
+                <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                    <ChevronLeft size={24}/>
+                </button>
+                <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">РАСЧЕТЫ</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <button onClick={() => setAppMode('calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-emerald-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors shadow-lg">
+                        <Calculator size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Калькулятор Скорости</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет скорости воздуха в воздуховодах</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderReferenceSection = () => (
+        <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
+             <div className="flex items-center gap-6 mb-10">
+                <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                    <ChevronLeft size={24}/>
+                </button>
+                <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">ЗНАНИЯ</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <button onClick={() => setAppMode('reference-wiki')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-amber-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-white transition-colors shadow-lg">
+                        <BookOpen size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Справочник</h3>
+                        <p className="text-sm text-slate-400 font-medium">Теория, формулы и нормативная документация</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    );
 
     if (appMode === 'launcher') {
         return (
@@ -98,15 +139,16 @@ const App = () => {
                 <div className="z-10 flex flex-col items-center gap-16 w-full p-8">
                     <div className={`text-center space-y-6 transition-all duration-700 ${launcherSection !== 'main' ? 'scale-75 opacity-0 absolute -top-20' : ''}`}>
                          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-white drop-shadow-2xl">
-                            AERO<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400">FLOW</span>
+                            HVAC<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400">LAB</span>
                         </h1>
-                        <p className="text-blue-200/60 text-sm font-bold tracking-[0.3em] uppercase">Elite Engineering Suite 2026</p>
+                        <p className="text-blue-200/60 text-sm font-bold tracking-[0.3em] uppercase">Инженерный комплекс</p>
                     </div>
 
                     <div className="w-full flex justify-center">
                         {launcherSection === 'main' && renderMainLauncher()}
                         {launcherSection === 'simulators' && renderSimulatorsSection()}
-                        {/* Add others similarly */}
+                        {launcherSection === 'calculations' && renderCalculationsSection()}
+                        {launcherSection === 'reference' && renderReferenceSection()}
                     </div>
                 </div>
             </div>
@@ -119,8 +161,6 @@ const App = () => {
     if (appMode === 'simulator') return <Simulator onBack={goBack} onHome={goHome} />;
     if (appMode === 'calculator') return <VelocityCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
-    
-    // Add missing returns for other modes/sections if needed based on previous App.tsx logic
 
     return null;
 };
