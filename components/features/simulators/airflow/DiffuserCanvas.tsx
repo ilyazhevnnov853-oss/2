@@ -178,7 +178,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         return {
             x: startX, y: startY, vx, vy, buoyancy, drag, 
             age: 0, life: 2.0 + Math.random() * 1.5,
-            lastHistoryTime: 0, history: [],
+            lastHistoryTime: 0, 
+            history: [{x: startX, y: startY, age: 0}], 
             color: getGlowColor(temp),
             waveFreq, wavePhase: Math.random() * Math.PI * 2, waveAmp, isHorizontal, isSuction
         };
@@ -267,18 +268,39 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             // Room Floor
             ctx.fillStyle = '#0f172a';
             ctx.fillRect(originX, originY, roomPixW, roomPixL);
+
+             // Heatmap Rendering
+             if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
+                const stepPx = gridStep * ppm;
+                
+                for (let r = 0; r < velocityField.length; r++) {
+                    for (let c = 0; c < velocityField[r].length; c++) {
+                        const v = velocityField[r][c];
+                        // Skip drawing for very low velocity to keep floor visible
+                        if (v < 0.1) continue; 
+
+                        let color = '';
+                        // Comfort Zone (0.1 - 0.25 m/s) -> Green
+                        if (v <= 0.25) color = 'rgba(16, 185, 129, 0.25)'; 
+                        // Warning Zone (0.25 - 0.5 m/s) -> Amber
+                        else if (v <= 0.5) color = 'rgba(245, 158, 11, 0.3)';
+                        // Draft Zone (> 0.5 m/s) -> Red
+                        else color = 'rgba(239, 68, 68, 0.35)';
+
+                        ctx.fillStyle = color;
+                        // Calculate position. velocityField grid corresponds to centers or top-left?
+                        // calculateVelocityField loops (0..cols), (0..rows).
+                        // x = c*gridStep + gridStep/2. 
+                        // To draw rect at c, we use c*stepPx.
+                        ctx.fillRect(originX + c * stepPx, originY + r * stepPx, stepPx, stepPx);
+                    }
+                }
+            }
             
             // Room Border
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 2;
             ctx.strokeRect(originX, originY, roomPixW, roomPixL);
-
-            // Heatmap Rendering (Simplified or Future Implementation)
-            if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
-                // To implement heatmap rendering, iterate over velocityField
-                // using gridStep and ppm to draw colored rects.
-                // Currently placeholder or relies on placedDiffusers radius logic below for quick visualization
-            }
 
             // Grid
             if (showGrid) {
@@ -380,7 +402,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     continue;
                 }
 
-                if (p.history.length > 2) {
+                if (p.history.length > 0) {
                     let alpha = (1 - p.age/p.life) * 0.5;
                     ctx.strokeStyle = `rgba(${p.color}, ${alpha})`; 
                     ctx.beginPath();
@@ -423,7 +445,9 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     fillStyle = 'rgba(245, 158, 11, 0.15)'; // Amber (Warning)
                     strokeStyle = 'rgba(245, 158, 11, 0.4)';
                 }
-
+                
+                // If Heatmap is ON, we might want to hide the circles to avoid clutter?
+                // Or keep them as boundaries. Keeping them is fine.
                 ctx.beginPath();
                 ctx.arc(cx, cy, Math.max(0, rPx), 0, Math.PI * 2);
                 ctx.fillStyle = fillStyle; 
@@ -470,7 +494,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
 
         requestRef.current = requestAnimationFrame(animate);
-    }, [width, height, isPowerOn, isPlaying, physics, temp, roomTemp, flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight, viewMode, roomWidth, roomLength, placedDiffusers, selectedDiffuserId, dragPreview]);
+    }, [width, height, isPowerOn, isPlaying, physics, temp, roomTemp, flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight, viewMode, roomWidth, roomLength, placedDiffusers, selectedDiffuserId, dragPreview, showHeatmap, velocityField, gridStep]);
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);

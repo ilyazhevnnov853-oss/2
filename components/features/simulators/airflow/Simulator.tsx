@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
@@ -227,7 +227,12 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <button onClick={() => setViewMode('top')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={14} strokeWidth={2.5}/><span>План</span></button>
                         <div className="w-px h-5 bg-white/10 mx-2"></div>
                         <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={16} /></button>
-                        {viewMode === 'top' && <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={16} /></button>}
+                        {viewMode === 'top' && (
+                            <>
+                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={16} /></button>
+                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-400' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={16} /></button>
+                            </>
+                        )}
                          <button onClick={handleExport} disabled={!isPowerOn} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={16} /></button>
                     </div>
                 </div>

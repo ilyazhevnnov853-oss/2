@@ -156,6 +156,25 @@ const Frac = ({num, den}: {num: React.ReactNode, den: React.ReactNode}) => (
 
 export const ENGINEERING_WIKI: WikiItem[] = [
   {
+    id: "velocity_duct",
+    category: "Аэродинамика",
+    title: "Скорость воздуха",
+    content_blocks: [
+      { type: "text", content: "Скорость потока воздуха напрямую зависит от его расхода и площади сечения воздуховода. Для подбора сечения используется следующая зависимость:" },
+      { type: "custom_formula", render: () => (
+          <div className="flex items-center justify-center p-6">
+             <Var c="v"/> <Op c="="/> <Frac num={<Var c="L"/>} den={<><Num c="3600"/> <Op c="·"/> <Var c="F"/></>} />
+          </div>
+      )},
+      { type: "variable_list", items: [
+          {symbol: <Var c="v"/>, definition: "скорость воздуха, м/с"},
+          {symbol: <Var c="L"/>, definition: "расход воздуха, м³/ч"},
+          {symbol: <Var c="F"/>, definition: "площадь сечения воздуховода, м²"}
+      ]},
+      { type: "text", content: "Рекомендуемые скорости: для магистралей 6-8 м/с, для ответвлений 4-5 м/с, на решетках 2-3 м/с." }
+    ]
+  },
+  {
     id: "vent_aero_friction",
     category: "Аэродинамика",
     title: "Потери давления на трение",
@@ -247,6 +266,79 @@ export const ENGINEERING_WIKI: WikiItem[] = [
               {symbol: <><Var c="t"/><Sub>in</Sub></>, definition: "температура на входе, °C"}
           ]}
       ]
+  },
+  {
+    id: "mixing_air",
+    category: "Термодинамика",
+    title: "Смешение воздуха",
+    content_blocks: [
+      { type: "text", content: "При смешении двух потоков воздуха (например, рециркуляционного и наружного) температура смеси определяется как средневзвешенная величина:" },
+      { type: "custom_formula", render: () => (
+          <div className="flex items-center justify-center p-6">
+             <Var c="t"/><Sub>mix</Sub> <Op c="="/> <Frac num={<><Var c="L"/><Sub>1</Sub><Op c="·"/><Var c="t"/><Sub>1</Sub> <Op c="+"/> <Var c="L"/><Sub>2</Sub><Op c="·"/><Var c="t"/><Sub>2</Sub></>} den={<><Var c="L"/><Sub>1</Sub> <Op c="+"/> <Var c="L"/><Sub>2</Sub></>} />
+          </div>
+      )},
+      { type: "variable_list", items: [
+          {symbol: <><Var c="t"/><Sub>mix</Sub></>, definition: "температура смеси, °C"},
+          {symbol: <><Var c="L"/><Sub>1,2</Sub></>, definition: "расход воздуха потоков, м³/ч"},
+          {symbol: <><Var c="t"/><Sub>1,2</Sub></>, definition: "температура потоков, °C"}
+      ]}
+    ]
+  },
+  {
+    id: "psychrometry_h",
+    category: "Термодинамика",
+    title: "Энтальпия воздуха",
+    content_blocks: [
+      { type: "text", content: "Энтальпия (теплосодержание) влажного воздуха складывается из энтальпии сухой части и энтальпии водяного пара. Это ключевой параметр для расчетов кондиционирования." },
+      { type: "custom_formula", render: () => (
+          <div className="flex items-center justify-center p-6 flex-wrap">
+             <Var c="h"/> <Op c="="/> <Num c="1.006"/><Op c="·"/><Var c="t"/> <Op c="+"/> <Frac num={<Var c="d"/>} den={<Num c="1000"/>}/> <Op c="·"/> <Text c="(" /><Num c="2501"/> <Op c="+"/> <Num c="1.86"/><Op c="·"/><Var c="t"/><Text c=")" />
+          </div>
+      )},
+      { type: "variable_list", items: [
+          {symbol: <Var c="h"/>, definition: "энтальпия, кДж/кг"},
+          {symbol: <Var c="t"/>, definition: "температура воздуха, °C"},
+          {symbol: <Var c="d"/>, definition: "влагосодержание, г/кг"}
+      ]}
+    ]
+  },
+  {
+    id: "cooling_load_solar",
+    category: "Кондиционирование",
+    title: "Теплопритоки (Окна)",
+    content_blocks: [
+      { type: "text", content: "Теплопоступления через остекление от солнечной радиации являются одной из основных составляющих тепловой нагрузки в летний период:" },
+      { type: "custom_formula", render: () => (
+          <div className="flex items-center justify-center p-6">
+             <Var c="Q"/><Sub>sun</Sub> <Op c="="/> <Var c="F"/><Sub>win</Sub> <Op c="·"/> <Var c="q"/><Sub>rad</Sub> <Op c="·"/> <Var c="k"/><Sub>shade</Sub>
+          </div>
+      )},
+      { type: "variable_list", items: [
+          {symbol: <><Var c="F"/><Sub>win</Sub></>, definition: "площадь остекления, м²"},
+          {symbol: <><Var c="q"/><Sub>rad</Sub></>, definition: "солнечная радиация (зависит от ориентации), Вт/м²"},
+          {symbol: <><Var c="k"/><Sub>shade</Sub></>, definition: "коэффициент затенения"}
+      ]}
+    ]
+  },
+  {
+    id: "smoke_extraction",
+    category: "Безопасность",
+    title: "Дымоудаление",
+    content_blocks: [
+      { type: "text", content: "Массовый расход удаляемых продуктов горения из коридора при пожаре рассчитывается по методике МР ВНИИПО. Базовая зависимость от площади проема:" },
+      { type: "custom_formula", render: () => (
+          <div className="flex items-center justify-center p-6">
+             <Var c="G"/><Sub>sm</Sub> <Op c="="/> <Var c="k"/> <Op c="·"/> <Var c="A"/><Sub>d</Sub> <Op c="·"/> <Var c="H"/><Sub>d</Sub><Sup>0.5</Sup>
+          </div>
+      )},
+      { type: "variable_list", items: [
+          {symbol: <><Var c="G"/><Sub>sm</Sub></>, definition: "массовый расход дыма, кг/с"},
+          {symbol: <><Var c="A"/><Sub>d</Sub></>, definition: "площадь дверного проема (ширина x высота), м²"},
+          {symbol: <><Var c="H"/><Sub>d</Sub></>, definition: "высота двери, м"},
+          {symbol: <Var c="k"/>, definition: "коэффициент (зависит от высоты нейтральной зоны)"}
+      ]}
+    ]
   },
   {
       id: "acoustics_basic",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge, CloudRain, Thermometer } from 'lucide-react';
+import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge, CloudRain, Thermometer, Flame } from 'lucide-react';
 import Simulator from './components/features/simulators/airflow/Simulator';
 import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
 import HeaterCalculator from './components/features/calculators/heater/HeaterCalculator';
@@ -10,6 +10,7 @@ import MixingCalculator from './components/features/calculators/mixing/MixingCal
 import PsychrometryCalculator from './components/features/calculators/psychrometry/PsychrometryCalculator';
 import CoolingCalculator from './components/features/calculators/cooling/CoolingCalculator';
 import KnowledgeCenter from './components/features/knowledge/KnowledgeCenter';
+import SmokeCalculator from './components/features/calculators/smoke/SmokeCalculator';
 
 const App = () => {
     const [appMode, setAppMode] = useState('launcher'); 
@@ -178,6 +179,16 @@ const App = () => {
                         <p className="text-sm text-slate-400 font-medium">Расчет теплопритоков</p>
                     </div>
                 </button>
+
+                <button onClick={() => setAppMode('smoke-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-red-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors shadow-lg">
+                        <Flame size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Противодымная защита</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет ДУ и подпора воздуха</p>
+                    </div>
+                </button>
             </div>
         </div>
     );
@@ -245,6 +256,7 @@ const App = () => {
     if (appMode === 'psychrometry-calculator') return <PsychrometryCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'calc-cooling') return <CoolingCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
+    if (appMode === 'smoke-calculator') return <SmokeCalculator onBack={goBack} onHome={goHome} />;
 
     return null;
 };
