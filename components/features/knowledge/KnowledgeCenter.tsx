@@ -1,25 +1,34 @@
 import React, { useState, useMemo } from 'react';
-import { BookOpen, FileText, ScrollText, ArrowRightLeft, ArrowRight, ChevronLeft, Home, Activity, Wind, Menu, X } from 'lucide-react';
-import { ENGINEERING_WIKI, NORMS_DB } from '../../../constants';
+import { BookOpen, FileText, ScrollText, ArrowRightLeft, ArrowRight, ChevronLeft, Home, Activity, Wind, Menu, X, Zap, Gauge, ChevronDown, Shapes, Info } from 'lucide-react';
+import { ENGINEERING_WIKI, NORMS_DB, AVOK_SYMBOLS } from '../../../constants';
 
 const WikiTab = ({ onRead }: any) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
         {ENGINEERING_WIKI.map((item, idx) => (
             <button 
                 key={idx}
                 onClick={() => onRead(item)}
-                className="group glass-panel p-6 rounded-2xl border border-white/5 hover:bg-white/10 text-left transition-all active:scale-[0.99] relative overflow-hidden"
+                className="group relative bg-[#0f1016] rounded-[24px] p-6 text-left transition-all duration-300 border border-white/5 hover:border-blue-500/30 hover:-translate-y-1 hover:shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden"
             >
-                <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <FileText size={64}/>
-                </div>
-                <div className="relative z-10">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest mb-3">
-                        {item.category}
+                {/* Background Glow */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                <div className="relative z-10 flex flex-col h-full">
+                     <div className="flex justify-between items-start mb-4">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-widest shadow-[0_0_10px_rgba(59,130,246,0.1)]">
+                            {item.category}
+                        </div>
+                        <div className="text-slate-600 group-hover:text-blue-400 transition-colors">
+                            <FileText size={20} strokeWidth={1.5}/>
+                        </div>
                     </div>
-                    <h3 className="text-lg font-bold text-white mb-2 group-hover:text-blue-200 transition-colors">{item.title}</h3>
-                    <div className="mt-4 flex items-center gap-2 text-xs font-bold text-blue-400 uppercase tracking-widest opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all">
-                        Читать <ArrowRight size={14}/>
+
+                    <h3 className="text-xl font-bold text-white mb-3 group-hover:text-blue-100 transition-colors leading-tight">{item.title}</h3>
+                    
+                    <div className="mt-auto pt-4 flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest group-hover:text-blue-400 transition-colors">
+                        <span>Читать статью</span>
+                        <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
                     </div>
                 </div>
             </button>
@@ -28,34 +37,91 @@ const WikiTab = ({ onRead }: any) => (
 );
 
 const NormsTab = () => (
-    <div className="grid grid-cols-1 gap-4 animate-in slide-in-from-right-8 fade-in pb-20">
-        {NORMS_DB.map((doc, i) => (
-            <div key={i} className="glass-panel p-5 rounded-xl border border-white/5 hover:bg-white/5 transition-all cursor-default">
-                <div className="flex justify-between items-start mb-2">
-                    <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded border border-emerald-500/20 uppercase tracking-wider">
-                        {doc.status}
-                    </span>
-                    <span className="text-slate-500 text-[10px] font-mono">{doc.code}</span>
+    <div className="w-full h-full flex flex-col items-center p-6 animate-in slide-in-from-right-8 fade-in duration-500">
+        <div className="w-full max-w-4xl space-y-4">
+            {NORMS_DB.map((doc, i) => (
+                <div key={i} className="group relative bg-[#0f1016] rounded-[24px] p-1 border border-white/5 shadow-lg hover:border-emerald-500/30 transition-all duration-300">
+                    {/* Gradient BG for hover */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-[24px]" />
+                    
+                    <div className="bg-[#0a0a0f] rounded-[20px] p-6 relative z-10 flex flex-col gap-4">
+                        <div className="flex justify-between items-start">
+                             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest">{doc.status}</span>
+                             </div>
+                             <span className="font-mono text-xs font-bold text-slate-500 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 group-hover:text-slate-300 transition-colors">{doc.code}</span>
+                        </div>
+                        
+                        <div>
+                             <h3 className="text-xl font-black text-white mb-2 group-hover:text-emerald-200 transition-colors tracking-tight">{doc.title}</h3>
+                             <p className="text-sm text-slate-400 font-medium leading-relaxed">{doc.desc}</p>
+                        </div>
+                    </div>
                 </div>
-                <h4 className="text-white font-bold text-sm mb-2">{doc.title}</h4>
-                <p className="text-xs text-slate-400 leading-relaxed border-t border-white/5 pt-2">{doc.desc}</p>
-            </div>
-        ))}
+            ))}
+        </div>
     </div>
 );
 
+const SymbolsTab = () => {
+    const [filter, setFilter] = useState('All');
+    const categories = ['All', ...Array.from(new Set(AVOK_SYMBOLS.map(s => s.category)))];
+
+    const filtered = filter === 'All' ? AVOK_SYMBOLS : AVOK_SYMBOLS.filter(s => s.category === filter);
+
+    return (
+        <div className="w-full h-full p-6 animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
+             {/* Filter Pills */}
+             <div className="flex flex-wrap gap-2 mb-8 justify-center">
+                {categories.map(c => (
+                    <button 
+                        key={c} 
+                        onClick={() => setFilter(c)}
+                        className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-all ${filter === c ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white'}`}
+                    >
+                        {c === 'All' ? 'Все' : c}
+                    </button>
+                ))}
+             </div>
+
+             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {filtered.map(item => (
+                    <div key={item.id} className="group relative bg-[#0f1016] rounded-[20px] p-4 border border-white/5 hover:border-blue-500/30 transition-all hover:-translate-y-1">
+                        <div className="aspect-square rounded-xl bg-black/40 border border-white/5 flex items-center justify-center mb-4 text-slate-300 group-hover:text-blue-400 transition-colors shadow-inner">
+                            {item.draw()}
+                        </div>
+                        <div className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">{item.category}</div>
+                        <h4 className="text-sm font-bold text-white mb-2 leading-tight">{item.title}</h4>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">{item.desc}</p>
+                    </div>
+                ))}
+             </div>
+        </div>
+    );
+};
+
 const ConverterTab = () => {
     const categories: any = useMemo(() => ({
-        pressure: { name: 'Давление', icon: <Activity/>, units: { 'Pa': 1, 'kPa': 1000, 'bar': 100000, 'psi': 6894.76, 'mmHg': 133.322 } },
-        flow: { name: 'Расход', icon: <Wind/>, units: { 'm3/h': 1, 'l/s': 3.6, 'l/min': 0.06, 'cfm': 1.699 } }, 
-        power: { name: 'Мощность', icon: <Activity/>, units: { 'kW': 1, 'W': 0.001, 'kcal/h': 0.001162, 'BTU/h': 0.000293 } },
-        velocity: { name: 'Скорость', icon: <Wind/>, units: { 'm/s': 1, 'km/h': 0.27778, 'fpm': 0.00508 } },
+        pressure: { name: 'Давление', icon: <Activity size={20} />, units: { 'Pa': 1, 'kPa': 1000, 'bar': 100000, 'psi': 6894.76, 'mmHg': 133.322, 'atm': 101325 } },
+        flow: { name: 'Расход', icon: <Wind size={20} />, units: { 'm³/h': 1, 'l/s': 3.6, 'l/min': 0.06, 'cfm': 1.699, 'm³/s': 3600 } }, 
+        power: { name: 'Мощность', icon: <Zap size={20} />, units: { 'kW': 1, 'W': 0.001, 'kcal/h': 0.001162, 'BTU/h': 0.000293, 'hp': 0.7457 } },
+        velocity: { name: 'Скорость', icon: <Gauge size={20} />, units: { 'm/s': 1, 'km/h': 0.27778, 'mph': 0.44704, 'kn': 0.51444, 'ft/min': 0.00508 } },
     }), []);
 
     const [cat, setCat] = useState('flow');
-    const [val1, setVal1] = useState(100);
-    const [unit1, setUnit1] = useState('m3/h');
+    const [val1, setVal1] = useState<string>('100'); 
+    const [unit1, setUnit1] = useState('m³/h');
     const [unit2, setUnit2] = useState('l/s');
+
+    // Reset units when category changes
+    React.useEffect(() => {
+        if (categories[cat]) {
+            const units = Object.keys(categories[cat].units);
+            setUnit1(units[0]);
+            setUnit2(units[1] || units[0]);
+        }
+    }, [cat, categories]);
 
     const convert = (value: number, fromUnit: string, toUnit: string) => {
         if (!categories[cat] || !categories[cat].units[fromUnit] || !categories[cat].units[toUnit]) return 0;
@@ -63,60 +129,104 @@ const ConverterTab = () => {
         return inBase / categories[cat].units[toUnit];
     };
     
-    const res = convert(val1, unit1, unit2);
+    const numVal = parseFloat(val1) || 0;
+    const res = convert(numVal, unit1, unit2);
 
     return (
-        <div className="max-w-2xl mx-auto animate-in slide-in-from-right-8 fade-in pb-20">
-            <div className="grid grid-cols-4 gap-2 mb-8">
+        <div className="w-full h-full flex flex-col items-center justify-center p-6 animate-in slide-in-from-right-8 fade-in duration-500">
+            {/* Category Tabs */}
+            <div className="flex flex-wrap justify-center gap-4 mb-16 w-full max-w-4xl">
                 {Object.entries(categories).map(([key, data]: any) => (
                     <button 
                         key={key}
                         onClick={() => setCat(key)}
-                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${cat === key ? 'bg-purple-600 border-purple-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                        className={`
+                            relative group flex flex-col items-center gap-3 px-8 py-5 rounded-[24px] border transition-all duration-300 min-w-[140px] overflow-hidden
+                            ${cat === key 
+                                ? 'bg-[#7c3aed] border-[#8b5cf6] text-white shadow-[0_10px_40px_rgba(124,58,237,0.4)] scale-105 z-10' 
+                                : 'bg-[#121216] border-white/5 text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/10'
+                            }
+                        `}
                     >
-                        <div className="scale-75">{data.icon}</div>
-                        <span className="text-[9px] font-bold uppercase tracking-tighter">{data.name}</span>
+                         {/* Glossy overlay for active */}
+                         {cat === key && <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>}
+                         
+                        <div className={`transition-transform duration-300 ${cat === key ? 'scale-110' : 'group-hover:scale-110'}`}>
+                            {data.icon}
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.2em]">{data.name}</span>
                     </button>
                 ))}
             </div>
-            <div className="glass-panel p-8 rounded-[32px] border border-white/10 bg-gradient-to-b from-white/5 to-transparent relative overflow-hidden">
-                <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-                    <div className="flex-1 w-full">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1 block">Входное значение</label>
-                        <div className="bg-black/30 p-2 rounded-2xl border border-white/10 flex flex-col gap-2">
-                            <input 
-                                type="number" 
-                                value={val1}
-                                onChange={e => setVal1(Number(e.target.value))}
-                                className="w-full bg-transparent text-3xl font-mono font-bold text-white outline-none px-2 py-1"
-                            />
-                            <div className="h-px bg-white/5 w-full"></div>
-                            <select 
+
+            {/* Converter Inputs */}
+            <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-8 items-center">
+                {/* Input Card */}
+                <div className="bg-[#0f1016] rounded-[32px] p-2 border border-white/5 shadow-2xl relative group focus-within:border-blue-500/30 transition-colors">
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent rounded-[32px] pointer-events-none"></div>
+                    <div className="bg-[#0a0a0f] rounded-[26px] p-6 relative z-10 h-48 flex flex-col justify-between">
+                         <div className="flex justify-between items-start">
+                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Входное значение</label>
+                             <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
+                         </div>
+
+                         <input 
+                            type="number" 
+                            value={val1}
+                            onChange={e => setVal1(e.target.value)}
+                            className="w-full bg-transparent text-5xl md:text-6xl font-black font-mono text-white outline-none placeholder-slate-700"
+                            placeholder="0"
+                         />
+
+                        <div className="relative">
+                             <select 
                                 value={unit1}
                                 onChange={e => setUnit1(e.target.value)}
-                                className="w-full bg-transparent text-xs font-bold text-purple-400 uppercase outline-none cursor-pointer px-2 py-1"
+                                className="w-full appearance-none bg-[#1a1b26] text-blue-400 text-xs font-bold uppercase tracking-widest py-3 px-4 rounded-xl outline-none cursor-pointer hover:bg-[#202230] transition-colors border border-white/5"
                             >
-                                {categories[cat] && Object.keys(categories[cat].units).map((u: string) => <option key={u} value={u} className="bg-slate-900">{u}</option>)}
+                                {categories[cat] && Object.keys(categories[cat].units).map((u: string) => <option key={u} value={u} className="bg-[#0a0a0f] text-slate-300">{u}</option>)}
                             </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400">
+                                <ChevronDown size={14} />
+                            </div>
                         </div>
                     </div>
-                    <div className="bg-white/5 p-3 rounded-full text-slate-500 rotate-90 md:rotate-0">
-                        <ArrowRightLeft size={20}/>
-                    </div>
-                    <div className="flex-1 w-full">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 ml-1 block">Результат</label>
-                        <div className="bg-purple-500/5 p-2 rounded-2xl border border-purple-500/20 flex flex-col gap-2 relative">
-                            <div className="w-full bg-transparent text-3xl font-mono font-bold text-purple-400 px-2 py-1 overflow-hidden text-ellipsis">
-                                {res.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                            </div>
-                            <div className="h-px bg-white/5 w-full"></div>
-                            <select 
+                </div>
+
+                {/* Swap Indicator */}
+                <div className="flex justify-center md:rotate-0 rotate-90">
+                    <button className="p-4 rounded-full bg-[#1a1b26] border border-white/10 text-slate-500 shadow-xl hover:text-white hover:scale-110 hover:bg-white/10 transition-all active:scale-95 group">
+                        <ArrowRightLeft size={24} className="group-hover:animate-pulse" />
+                    </button>
+                </div>
+
+                {/* Output Card */}
+                 <div className="bg-[#0f1016] rounded-[32px] p-2 border border-white/5 shadow-2xl relative group">
+                    <div className="absolute inset-0 bg-gradient-to-b from-purple-500/5 to-transparent rounded-[32px] pointer-events-none"></div>
+                     {/* Glow effect */}
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-pink-600 rounded-[32px] opacity-0 group-hover:opacity-20 blur transition-opacity duration-500"></div>
+
+                    <div className="bg-[#0a0a0f] rounded-[26px] p-6 relative z-10 h-48 flex flex-col justify-between">
+                         <div className="flex justify-between items-start">
+                             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Результат</label>
+                             <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"></div>
+                         </div>
+
+                         <div className="w-full bg-transparent text-5xl md:text-6xl font-black font-mono text-purple-400 overflow-hidden text-ellipsis whitespace-nowrap">
+                             {numVal === 0 ? '0' : res < 0.001 ? res.toExponential(4) : res.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                         </div>
+
+                         <div className="relative">
+                             <select 
                                 value={unit2}
                                 onChange={e => setUnit2(e.target.value)}
-                                className="w-full bg-transparent text-xs font-bold text-purple-500 uppercase outline-none cursor-pointer px-2 py-1"
+                                className="w-full appearance-none bg-[#1a1b26] text-purple-400 text-xs font-bold uppercase tracking-widest py-3 px-4 rounded-xl outline-none cursor-pointer hover:bg-[#202230] transition-colors border border-white/5"
                             >
-                                {categories[cat] && Object.keys(categories[cat].units).map((u: string) => <option key={u} value={u} className="bg-slate-900">{u}</option>)}
+                                {categories[cat] && Object.keys(categories[cat].units).map((u: string) => <option key={u} value={u} className="bg-[#0a0a0f] text-slate-300">{u}</option>)}
                             </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-purple-400">
+                                <ChevronDown size={14} />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -126,31 +236,43 @@ const ConverterTab = () => {
 };
 
 const ArticleView = ({ item, onBack }: any) => (
-    <div className="animate-in slide-in-from-bottom-10 fade-in duration-300">
-        <div className="flex items-center gap-4 mb-8">
-            <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all font-bold text-xs uppercase tracking-widest border border-white/5">
-                <ChevronLeft size={16}/> Назад
+    <div className="animate-in slide-in-from-bottom-10 fade-in duration-500 w-full h-full flex flex-col">
+        {/* Sticky Header for Article */}
+        <div className="flex items-center gap-6 mb-8 pb-6 border-b border-white/5 sticky top-0 bg-[#030304]/95 backdrop-blur-md z-30 pt-2 px-2">
+            <button onClick={onBack} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-all font-bold text-xs uppercase tracking-widest border border-white/5 hover:border-white/20 active:scale-95">
+                <ChevronLeft size={16}/> <span className="hidden sm:inline">Назад</span>
             </button>
-            <div className="h-px flex-1 bg-white/5"></div>
-            <span className="text-[10px] font-bold uppercase text-slate-500">{item.category}</span>
+            <div className="flex flex-col">
+                <div className="inline-flex items-center gap-2 mb-1">
+                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400">{item.category}</span>
+                </div>
+                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">{item.title}</h1>
+            </div>
         </div>
 
-        <div className="max-w-3xl mx-auto pb-20">
-            <h1 className="text-3xl font-black text-white mb-8">{item.title}</h1>
+        <div className="max-w-4xl mx-auto w-full pb-20 px-2">
             <div className="prose prose-invert prose-lg max-w-none">
                 {item.content_blocks.map((block: any, i: number) => {
-                    if (block.type === 'text') return <p key={i} className="text-slate-300 mb-6 leading-relaxed">{block.content}</p>;
+                    if (block.type === 'text') return <p key={i} className="text-slate-300 mb-8 leading-relaxed text-lg font-light">{block.content}</p>;
                     if (block.type === 'custom_formula') return (
-                        <div key={i} className="my-8 p-6 bg-white/5 border border-white/10 rounded-2xl flex justify-center overflow-x-auto">
-                            {block.render()}
+                        <div key={i} className="my-10 relative group">
+                            <div className="absolute inset-0 bg-blue-500/5 rounded-2xl blur-xl group-hover:bg-blue-500/10 transition-colors duration-500"></div>
+                            <div className="relative bg-[#0a0a0f]/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                                <div className="absolute top-0 left-0 p-3 opacity-20">
+                                    <Shapes size={24} className="text-blue-400" />
+                                </div>
+                                {block.render()}
+                            </div>
                         </div>
                     );
                     if (block.type === 'variable_list') return (
-                        <div key={i} className="grid grid-cols-1 gap-2 mb-8 bg-black/20 p-4 rounded-xl border border-white/5">
+                        <div key={i} className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-10">
                             {block.items.map((item: any, j: number) => (
-                                <div key={j} className="flex items-baseline justify-between text-sm border-b border-white/5 last:border-0 pb-2 last:pb-0">
-                                    <span className="font-serif italic font-bold text-slate-200">{item.symbol}</span>
-                                    <span className="text-slate-400 text-right">{item.definition}</span>
+                                <div key={j} className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+                                    <div className="min-w-[3.5rem] h-14 px-3 flex items-center justify-center rounded-xl bg-black/40 border border-white/10 shadow-inner">
+                                        {item.symbol}
+                                    </div>
+                                    <span className="text-sm text-slate-300 font-medium">{item.definition}</span>
                                 </div>
                             ))}
                         </div>
@@ -223,6 +345,7 @@ const KnowledgeCenter = ({ onBack, onHome, initialSection = 'wiki' }: any) => {
                          {[
                             {id: 'wiki', label: 'Теория и Формулы', icon: <FileText size={18}/>},
                             {id: 'norms', label: 'Нормы', icon: <ScrollText size={18}/>},
+                            {id: 'symbols', label: 'Обозначения АВОК', icon: <Shapes size={18}/>},
                             {id: 'converter', label: 'Конвертер', icon: <ArrowRightLeft size={18}/>}
                         ].map(tab => (
                             <button 
@@ -256,9 +379,10 @@ const KnowledgeCenter = ({ onBack, onHome, initialSection = 'wiki' }: any) => {
                         {readingItem ? (
                              <ArticleView item={readingItem} onBack={() => setReadingItem(null)} />
                         ) : (
-                             <div className="max-w-5xl mx-auto pt-10">
+                             <div className="max-w-5xl mx-auto h-full flex flex-col">
                                 {activeSection === 'wiki' && <WikiTab onRead={setReadingItem} />}
                                 {activeSection === 'norms' && <NormsTab />}
+                                {activeSection === 'symbols' && <SymbolsTab />}
                                 {activeSection === 'converter' && <ConverterTab />}
                              </div>
                         )}

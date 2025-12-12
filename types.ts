@@ -74,7 +74,7 @@ export interface WikiContentBlock {
   type: 'text' | 'custom_formula' | 'variable_list';
   content?: string;
   render?: () => ReactNode;
-  items?: { symbol: string; definition: string }[];
+  items?: { symbol: ReactNode; definition: string }[];
 }
 
 export interface WikiItem {
@@ -89,6 +89,14 @@ export interface NormItem {
   title: string;
   status: string;
   desc: string;
+}
+
+export interface SymbolItem {
+  id: string;
+  category: string;
+  title: string;
+  desc: string;
+  draw: () => ReactNode;
 }
 
 export type EngineeringData = Record<string, Record<string, Record<string | number, ModePoint[]>>>;
