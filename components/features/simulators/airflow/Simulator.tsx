@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
@@ -22,6 +22,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
     const [activeTab, setActiveTab] = useState<'overview' | 'selection'>('overview'); 
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); // New state for mobile stats
     const [openSection, setOpenSection] = useState<string | null>('distributor');
 
     // Simulation Data
@@ -30,6 +31,9 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [dragPreview, setDragPreview] = useState<{x: number, y: number, width: number, height: number} | null>(null);
     const [velocityField, setVelocityField] = useState<number[][]>([]);
     const [coverageAnalysis, setCoverageAnalysis] = useState({ totalCoverage: 0, avgVelocity: 0, comfortZones: 0, warningZones: 0, draftZones: 0, deadZones: 0 });
+    
+    // UI Interaction State
+    const [isDragging, setIsDragging] = useState(false);
 
     // Calculator State
     const [calcVolume, setCalcVolume] = useState<number | string>(300);
@@ -65,9 +69,14 @@ const Simulator = ({ onBack, onHome }: any) => {
     
     useEffect(() => {
         if (viewMode !== 'top' || placedDiffusers.length === 0) { setVelocityField([]); return; }
-        // Use 0.1 (10cm) step for higher resolution heatmap as requested
-        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, 0.1));
-    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode]);
+        
+        // Dynamic Resolution:
+        // When dragging: Use coarse step (0.5m) -> Fast updates (144 points for 6x6m)
+        // When static: Use fine step (0.1m) -> High precision (3600 points for 6x6m)
+        const step = isDragging ? 0.5 : 0.1;
+        
+        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step));
+    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging]);
     
     useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
     
@@ -182,7 +191,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     };
 
     return (
-        <div className="flex w-full min-h-screen bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-blue-500/30">
+        <div className="flex w-full h-[100dvh] bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-blue-500/30">
              {/* AMBIENT BACKGROUND */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
@@ -207,12 +216,17 @@ const Simulator = ({ onBack, onHome }: any) => {
             />
 
             {/* --- MAIN CONTENT AREA --- */}
-            <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
+            <div className="flex-1 flex flex-col relative h-full overflow-hidden p-0 lg:p-4 lg:pl-0">
                 {/* CANVAS */}
-                <div ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop} onDragLeave={handleDragLeave} className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group">
+                <div ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop} onDragLeave={handleDragLeave} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border-b lg:border border-white/5 ring-1 ring-white/5 group">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
                     <div className="absolute inset-0 bg-gradient-to-b from-blue-900/5 to-transparent pointer-events-none"></div>
-                    <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-blue-600 text-white shadow-lg"><Menu size={20} /></button>
+                    
+                    {/* Top Bar for Mobile */}
+                    <div className="lg:hidden absolute top-4 left-4 right-4 z-30 flex justify-between items-center pointer-events-none">
+                        <button onClick={() => setIsMobileMenuOpen(true)} className="pointer-events-auto p-3 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/30 active:scale-95 transition-transform"><Menu size={20} /></button>
+                        <button onClick={() => setIsMobileStatsOpen(true)} className="pointer-events-auto p-3 rounded-full bg-white/10 backdrop-blur-md text-white border border-white/10 active:scale-95 transition-transform"><Info size={20} /></button>
+                    </div>
                     
                     <DiffuserCanvas 
                         width={viewSize.w} height={viewSize.h} physics={physics} 
@@ -224,25 +238,27 @@ const Simulator = ({ onBack, onHome }: any) => {
                         viewMode={viewMode} placedDiffusers={placedDiffusers} 
                         onUpdateDiffuserPos={updateDiffuserPosition} onSelectDiffuser={setSelectedDiffuserId}
                         onRemoveDiffuser={removeDiffuser} onDuplicateDiffuser={duplicateDiffuser} selectedDiffuserId={selectedDiffuserId}
-                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={0.1} dragPreview={dragPreview}
+                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={isDragging ? 0.5 : 0.1} dragPreview={dragPreview}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
+                        onDragStart={() => setIsDragging(true)}
+                        onDragEnd={() => setIsDragging(false)}
                     />
                 </div>
                 
-                 {/* FLOATING "ISLAND" BAR (Moved to Bottom) */}
-                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 animate-in slide-in-from-bottom-4 duration-700">
-                    <div className="flex items-center p-1.5 rounded-full bg-[#0f1014]/80 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-                         <button onClick={() => setViewMode('side')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={14} strokeWidth={2.5}/><span>Срез</span></button>
-                        <button onClick={() => setViewMode('top')} className={`px-6 py-3 rounded-full text-[11px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={14} strokeWidth={2.5}/><span>План</span></button>
-                        <div className="w-px h-5 bg-white/10 mx-2"></div>
-                        <button onClick={() => setShowGrid(!showGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={16} /></button>
+                 {/* FLOATING "ISLAND" BAR (Mobile Optimized) */}
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
+                    <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-[#0f1014]/90 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
+                         <button onClick={() => setViewMode('side')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
+                        <button onClick={() => setViewMode('top')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
+                        <div className="w-px h-6 bg-white/10 mx-1"></div>
+                        <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
                         {viewMode === 'top' && (
                             <>
-                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={16} /></button>
-                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-400' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={16} /></button>
+                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
+                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-400' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
                             </>
                         )}
-                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={16} /></button>
+                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={18} /></button>
                     </div>
                 </div>
             </div>
@@ -254,6 +270,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                 placedDiffusers={placedDiffusers}
                 topViewStats={topViewStats}
                 coverageAnalysis={coverageAnalysis}
+                isMobileStatsOpen={isMobileStatsOpen}
+                setIsMobileStatsOpen={setIsMobileStatsOpen}
             />
         </div>
     );

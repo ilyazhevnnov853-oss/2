@@ -58,22 +58,25 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
     };
 
     return (
-        <div className="flex w-full min-h-screen bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-emerald-500/30">
+        <div className="flex w-full h-[100dvh] bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-emerald-500/30">
             {/* AMBIENT BACKGROUND */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] brightness-100 contrast-150 pointer-events-none"></div>
 
             {/* LEFT PANEL (Controls) */}
+            {isMobileMenuOpen && (
+                <div className="fixed inset-0 bg-black/80 z-[60] lg:hidden backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+            )}
+
              <div className={`
-                fixed inset-0 z-50 bg-black/95 backdrop-blur-xl lg:static lg:bg-transparent
-                flex flex-col lg:w-[420px] h-screen shrink-0 transition-transform duration-300
+                fixed inset-y-0 left-0 z-[70] bg-[#0a0a0f] lg:bg-transparent lg:static w-[85vw] md:w-[420px] lg:w-[420px] h-full shrink-0 transition-transform duration-300 ease-out
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-                relative z-30 p-4 pl-0 lg:pl-4
+                p-0 lg:p-4 lg:pl-4 border-r border-white/10 lg:border-none shadow-2xl lg:shadow-none
             `}>
-                <div className="flex-1 flex flex-col rounded-[32px] bg-[#0a0a0f]/80 backdrop-blur-2xl border border-white/5 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5">
+                <div className="flex-1 flex flex-col h-full lg:rounded-[32px] bg-[#0a0a0f] lg:bg-[#0a0a0f]/80 backdrop-blur-2xl lg:border border-white/5 overflow-hidden ring-1 ring-white/5">
                     {/* Header */}
-                    <div className="p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative">
+                    <div className="p-5 lg:p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative pt-safe-top">
                          <div className="flex justify-between items-center lg:hidden mb-4">
                             <h2 className="text-lg font-bold text-white">Меню</h2>
                             <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
@@ -81,16 +84,16 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
                                     <Home size={18} />
                                 </button>
-                                <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
                                     <ChevronLeft size={18} />
                                 </button>
                             </div>
-                            <div className="h-8 w-px bg-white/10"></div>
+                            <div className="h-8 w-px bg-white/10 hidden lg:block"></div>
                             
-                            <div className="flex items-center gap-3">
+                            <div className="hidden lg:flex items-center gap-3">
                                 <div className="p-2 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-lg shadow-emerald-500/20 text-white">
                                     <Calculator size={20} />
                                 </div>
@@ -104,14 +107,14 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                         {/* Mode Switcher */}
                         <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
                             <button 
-                                onClick={() => setMode('check')}
-                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'check' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-white'}`}
+                                onClick={() => { setMode('check'); setIsMobileMenuOpen(false); }}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 lg:py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'check' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-white'}`}
                             >
                                 <Table2 size={14} /> Таблица
                             </button>
                             <button 
-                                onClick={() => setMode('wizard')}
-                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'wizard' ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'text-slate-500 hover:text-white'}`}
+                                onClick={() => { setMode('wizard'); setIsMobileMenuOpen(false); }}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 lg:py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'wizard' ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'text-slate-500 hover:text-white'}`}
                             >
                                 <Wand2 size={14} /> Подбор
                             </button>
@@ -119,7 +122,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                     </div>
 
                     {/* Controls Content */}
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-8">
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-5 space-y-8 pb-20 lg:pb-5">
                         
                         {/* Common Input */}
                         <div className="space-y-6">
@@ -238,21 +241,21 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
             </div>
 
             {/* RIGHT CONTENT */}
-            <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
-                <div className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group flex flex-col">
+            <div className="flex-1 flex flex-col relative h-full overflow-hidden p-0 lg:p-4 lg:pl-0">
+                <div className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group flex flex-col">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
                     <div className="absolute inset-0 bg-gradient-to-b from-blue-900/5 to-transparent pointer-events-none"></div>
 
                     {/* Header */}
-                    <div className="p-8 pb-4 flex items-center justify-between relative z-10">
+                    <div className="p-6 pt-safe-top lg:pt-8 pb-4 flex items-center justify-between relative z-10 bg-[#030304]/80 backdrop-blur-md lg:bg-transparent">
                         <div className="flex items-center gap-4">
-                            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-3 rounded-full bg-blue-600 text-white shadow-lg"><Menu size={20} /></button>
+                            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-3 rounded-full bg-blue-600 text-white shadow-lg active:scale-95 transition-transform"><Menu size={20} /></button>
                             <div>
-                                <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                                <h2 className="text-xl lg:text-2xl font-black text-white tracking-tight flex items-center gap-3">
                                     {mode === 'check' ? <Grid className="text-emerald-500" size={24} /> : <Wand2 className="text-teal-500" size={24} />}
-                                    {mode === 'check' ? 'Прямоугольные воздуховоды' : 'Результаты подбора'}
+                                    <span className="truncate">{mode === 'check' ? 'Прямоугольные' : 'Результаты'}</span>
                                 </h2>
-                                <p className="text-xs text-slate-400 font-medium mt-1 uppercase tracking-wider ml-9">
+                                <p className="text-xs text-slate-400 font-medium mt-1 uppercase tracking-wider hidden sm:block">
                                     {mode === 'check' ? 'Таблица скоростей (м/с)' : `Подходящие сечения (V ≤ ${maxSpeed} м/с)`}
                                 </p>
                             </div>
@@ -262,9 +265,9 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                     {/* CONTENT AREA */}
                     {mode === 'check' ? (
                         // EXISTING CHECK MODE (MATRIX)
-                        <div className="flex-1 overflow-auto custom-scrollbar p-6 pt-0 relative z-10">
+                        <div className="flex-1 overflow-auto custom-scrollbar p-0 lg:p-6 lg:pt-0 relative z-10">
                             <div className="inline-block min-w-full align-middle">
-                                <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-sm shadow-2xl">
+                                <div className="border-t lg:border border-white/10 lg:rounded-2xl overflow-hidden bg-black/40 backdrop-blur-sm shadow-2xl">
                                     <table className="min-w-full divide-y divide-white/5 border-collapse">
                                         <thead className="bg-[#0a0a0f] sticky top-0 z-20 shadow-lg">
                                             <tr>
@@ -314,12 +317,12 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                         </div>
                     ) : (
                         // NEW WIZARD MODE (LIST)
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-0 relative z-10 space-y-8 animate-in slide-in-from-right-8 duration-500">
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-6 lg:pt-0 relative z-10 space-y-8 animate-in slide-in-from-right-8 duration-500">
                              
                              {/* Circular Section */}
                              <div>
                                 <SectionHeader icon={<CircleDot size={16}/>} title="Круглые воздуховоды" />
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4">
                                     {suggestions.round.length > 0 ? suggestions.round.map((item, i) => (
                                         <div key={item.d} className={`relative p-4 rounded-2xl border transition-all hover:scale-[1.02] ${i === 0 ? 'bg-teal-500/20 border-teal-500/50 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
                                             {i === 0 && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-teal-500 text-black text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shadow-lg">Optimal</div>}
@@ -341,7 +344,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                              {/* Rectangular Section */}
                              <div>
                                 <SectionHeader icon={<Grid size={16}/>} title="Прямоугольные (Топ 50)" />
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4 pb-10">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4 pb-24 lg:pb-10">
                                     {suggestions.rect.length > 0 ? suggestions.rect.map((item, i) => (
                                         <div key={`${item.w}x${item.h}`} className={`relative p-4 rounded-2xl border transition-all hover:scale-[1.02] ${i === 0 ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
                                              {i === 0 && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shadow-lg">Optimal</div>}

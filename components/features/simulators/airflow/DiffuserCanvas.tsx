@@ -32,6 +32,11 @@ interface DiffuserCanvasProps {
   onSelectDiffuser?: (id: string) => void;
   onRemoveDiffuser?: (id: string) => void;
   onDuplicateDiffuser?: (id: string) => void;
+  
+  // Performance & Drag Handlers
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+
   selectedDiffuserId?: string | null;
   showHeatmap?: boolean;
   velocityField?: number[][];
@@ -46,11 +51,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
     flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight,
     roomWidth = 6, roomLength = 6, viewMode = 'side', placedDiffusers = [], 
     onUpdateDiffuserPos, onSelectDiffuser, onRemoveDiffuser, onDuplicateDiffuser, selectedDiffuserId, 
+    onDragStart, onDragEnd,
     dragPreview, snapToGrid, gridSnapSize,
     showHeatmap, velocityField, gridStep
 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const bgCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const requestRef = useRef<number>(0);
     const particlesRef = useRef<any[]>([]); 
     
@@ -70,7 +76,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
     };
 
     // --- Helper for Scaling ---
-    const getLayout = () => {
+    const getLayout = useCallback(() => {
         if (viewMode === 'side') {
             return {
                 ppm: height / roomHeight,
@@ -88,13 +94,126 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             const originY = (height - roomPixH) / 2;
             return { ppm, originX, originY };
         }
-    };
+    }, [width, height, roomWidth, roomLength, roomHeight, viewMode]);
 
     useEffect(() => {
         particlesRef.current = [];
-        // Reset static background when dimensions change
-        bgCanvasRef.current = null;
+        offscreenCanvasRef.current = null; // Force rebuild of cache
     }, [modelId, flowType, physics.spec?.A, diffuserHeight, viewMode, width, height, roomWidth, roomLength]);
+
+    // --- OPTIMIZATION: Render Static Background to Offscreen Canvas ---
+    useEffect(() => {
+        if (viewMode !== 'top') return;
+
+        if (!offscreenCanvasRef.current) {
+            offscreenCanvasRef.current = document.createElement('canvas');
+        }
+        const canvas = offscreenCanvasRef.current;
+        if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+        }
+        
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) return;
+
+        // Clear
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, width, height);
+
+        const { ppm, originX, originY } = getLayout();
+        const roomPixW = roomWidth * ppm;
+        const roomPixL = roomLength * ppm;
+
+        // Room Floor
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(originX, originY, roomPixW, roomPixL);
+
+        // Heatmap - BATCH DRAWING FOR PERFORMANCE
+        if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
+            const stepPx = gridStep * ppm;
+            
+            // Use Path2D to batch draw calls by color
+            const comfortPath = new Path2D();
+            const warningPath = new Path2D();
+            const draftPath = new Path2D();
+
+            for (let r = 0; r < velocityField.length; r++) {
+                for (let c = 0; c < velocityField[r].length; c++) {
+                    const v = velocityField[r][c];
+                    if (v < 0.1) continue;
+                    
+                    const x = originX + c * stepPx;
+                    const y = originY + r * stepPx;
+                    
+                    // Slightly larger rect to avoid subpixel gaps
+                    const drawSize = stepPx + 0.5;
+
+                    if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
+                    else if (v <= 0.5) warningPath.rect(x, y, drawSize, drawSize);
+                    else draftPath.rect(x, y, drawSize, drawSize);
+                }
+            }
+
+            // Execute batch fills
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+            ctx.fill(comfortPath);
+            
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
+            ctx.fill(warningPath);
+            
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+            ctx.fill(draftPath);
+        }
+
+        // Room Border
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(originX, originY, roomPixW, roomPixL);
+
+        // Grid (Dual: 10cm / 1m)
+        if (showGrid) {
+            // Minor lines (every 10cm) - ONLY DRAW if step is small enough to see, otherwise just noise
+            // Optimization: Don't draw 10cm lines during heavy drag (coarse grid) to keep FPS high
+            if (!gridStep || gridStep < 0.2) {
+                ctx.beginPath();
+                ctx.lineWidth = 0.5;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+                for (let x = 0; x <= roomWidth; x += 0.1) {
+                    if (Math.abs(x % 1) > 0.01) { 
+                        const px = x * ppm;
+                        ctx.moveTo(originX + px, originY);
+                        ctx.lineTo(originX + px, originY + roomPixL);
+                    }
+                }
+                for (let y = 0; y <= roomLength; y += 0.1) {
+                    if (Math.abs(y % 1) > 0.01) {
+                        const py = y * ppm;
+                        ctx.moveTo(originX, originY + py);
+                        ctx.lineTo(originX + roomPixW, originY + py);
+                    }
+                }
+                ctx.stroke();
+            }
+
+            // Major lines (every 1m)
+            ctx.beginPath();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; 
+            for (let x = 0; x <= roomWidth; x += 1) {
+                const px = x * ppm;
+                ctx.moveTo(originX + px, originY);
+                ctx.lineTo(originX + px, originY + roomPixL);
+            }
+            for (let y = 0; y <= roomLength; y += 1) {
+                const py = y * ppm;
+                ctx.moveTo(originX, originY + py);
+                ctx.lineTo(originX + roomPixW, originY + py);
+            }
+            ctx.stroke();
+        }
+
+    }, [width, height, roomWidth, roomLength, viewMode, showHeatmap, showGrid, velocityField, gridStep, getLayout]);
 
 
     // --- SIDE VIEW PARTICLE LOGIC ---
@@ -260,95 +379,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
     };
 
-    // --- RENDER STATIC BACKGROUND (TOP VIEW) ---
-    const renderStaticBackground = (ctx: CanvasRenderingContext2D, layout: any) => {
-        // Clear entire canvas
-        ctx.fillStyle = '#050505';
-        ctx.fillRect(0, 0, width, height);
-
-        if (viewMode === 'top') {
-            const { ppm, originX, originY } = layout;
-            const roomPixW = roomWidth * ppm;
-            const roomPixL = roomLength * ppm;
-
-            // Room Floor
-            ctx.fillStyle = '#0f172a';
-            ctx.fillRect(originX, originY, roomPixW, roomPixL);
-
-             // Heatmap Rendering
-             if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
-                const stepPx = gridStep * ppm;
-                
-                for (let r = 0; r < velocityField.length; r++) {
-                    for (let c = 0; c < velocityField[r].length; c++) {
-                        const v = velocityField[r][c];
-                        // Skip drawing for very low velocity to keep floor visible
-                        if (v < 0.1) continue; 
-
-                        let color = '';
-                        // Comfort Zone (0.1 - 0.25 m/s) -> Green
-                        if (v <= 0.25) color = 'rgba(16, 185, 129, 0.25)'; 
-                        // Warning Zone (0.25 - 0.5 m/s) -> Amber
-                        else if (v <= 0.5) color = 'rgba(245, 158, 11, 0.3)';
-                        // Draft Zone (> 0.5 m/s) -> Red
-                        else color = 'rgba(239, 68, 68, 0.35)';
-
-                        ctx.fillStyle = color;
-                        // Calculate position. velocityField grid corresponds to centers or top-left?
-                        // calculateVelocityField loops (0..cols), (0..rows).
-                        // x = c*gridStep + gridStep/2. 
-                        // To draw rect at c, we use c*stepPx.
-                        ctx.fillRect(originX + c * stepPx, originY + r * stepPx, stepPx, stepPx);
-                    }
-                }
-            }
-            
-            // Room Border
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(originX, originY, roomPixW, roomPixL);
-
-            // Grid (New Dual Grid: 10cm minor, 1m major)
-            if (showGrid) {
-                // Minor lines (every 10cm)
-                ctx.beginPath();
-                ctx.lineWidth = 0.5;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-                for (let x = 0; x <= roomWidth; x += 0.1) {
-                    if (Math.abs(x % 1) > 0.01) { // Skip major lines
-                        const px = x * ppm;
-                        ctx.moveTo(originX + px, originY);
-                        ctx.lineTo(originX + px, originY + roomPixL);
-                    }
-                }
-                for (let y = 0; y <= roomLength; y += 0.1) {
-                    if (Math.abs(y % 1) > 0.01) {
-                        const py = y * ppm;
-                        ctx.moveTo(originX, originY + py);
-                        ctx.lineTo(originX + roomPixW, originY + py);
-                    }
-                }
-                ctx.stroke();
-
-                // Major lines (every 1m)
-                ctx.beginPath();
-                ctx.lineWidth = 1;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; // Stronger visibility
-                for (let x = 0; x <= roomWidth; x += 1) {
-                    const px = x * ppm;
-                    ctx.moveTo(originX + px, originY);
-                    ctx.lineTo(originX + px, originY + roomPixL);
-                }
-                for (let y = 0; y <= roomLength; y += 1) {
-                    const py = y * ppm;
-                    ctx.moveTo(originX, originY + py);
-                    ctx.lineTo(originX + roomPixW, originY + py);
-                }
-                ctx.stroke();
-            }
-        }
-    };
-
     const animate = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -370,7 +400,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
 
             // Simulation
             if (isPowerOn && isPlaying && !physics.error) {
-                const maxParticles = 3500; 
+                // OPTIMIZATION: Reduced max particles from 3500 to 1000
+                const maxParticles = 1000; 
                 const spawnRate = Math.ceil(5 + (physics.v0 || 0) / 2 * 8);
                 
                 if (particlesRef.current.length < maxParticles) {
@@ -421,7 +452,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                         p.history.push({ x: p.x, y: p.y, age: p.age });
                         p.lastHistoryTime = p.age;
                     }
-                    if (p.history.length > 20) p.history.shift();
+                    if (p.history.length > 10) p.history.shift(); // Reduced history for performance
                 }
 
                 if (p.age > p.life || p.y > height || p.x < 0 || p.x > width || p.y < -100) {
@@ -447,8 +478,14 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         } else {
             // --- TOP VIEW RENDER ---
             
-            // Use cached background if possible (not implemented here for brevity, using direct draw)
-            renderStaticBackground(ctx, layout);
+            // Use cached background from offscreen canvas
+            if (offscreenCanvasRef.current) {
+                ctx.drawImage(offscreenCanvasRef.current, 0, 0);
+            } else {
+                // Fallback clear
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(0, 0, width, height);
+            }
 
             const { ppm, originX, originY } = layout;
 
@@ -457,31 +494,31 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 const cx = originX + d.x * ppm;
                 const cy = originY + d.y * ppm;
                 
-                // Draw Coverage Area (Physics-based)
-                const rPx = d.performance.coverageRadius * ppm;
-                const v = d.performance.workzoneVelocity;
-                
-                let fillStyle = 'rgba(16, 185, 129, 0.15)'; // Greenish (Comfort)
-                let strokeStyle = 'rgba(16, 185, 129, 0.4)';
-                
-                // Velocity color coding
-                if (v > 0.5) { 
-                    fillStyle = 'rgba(239, 68, 68, 0.15)'; // Red (Draft)
-                    strokeStyle = 'rgba(239, 68, 68, 0.4)';
-                } else if (v > 0.25) { 
-                    fillStyle = 'rgba(245, 158, 11, 0.15)'; // Amber (Warning)
-                    strokeStyle = 'rgba(245, 158, 11, 0.4)';
+                // Draw Coverage Area (Physics-based) - Optional in top view on top of heatmap?
+                // Keeping circles but making them subtle if heatmap is on
+                if (!showHeatmap) {
+                    const rPx = d.performance.coverageRadius * ppm;
+                    const v = d.performance.workzoneVelocity;
+                    
+                    let fillStyle = 'rgba(16, 185, 129, 0.15)'; 
+                    let strokeStyle = 'rgba(16, 185, 129, 0.4)';
+                    
+                    if (v > 0.5) { 
+                        fillStyle = 'rgba(239, 68, 68, 0.15)'; 
+                        strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                    } else if (v > 0.25) { 
+                        fillStyle = 'rgba(245, 158, 11, 0.15)'; 
+                        strokeStyle = 'rgba(245, 158, 11, 0.4)';
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, Math.max(0, rPx), 0, Math.PI * 2);
+                    ctx.fillStyle = fillStyle; 
+                    ctx.fill();
+                    ctx.lineWidth = 1; 
+                    ctx.strokeStyle = strokeStyle; 
+                    ctx.stroke();
                 }
-                
-                // If Heatmap is ON, we might want to hide the circles to avoid clutter?
-                // Or keep them as boundaries. Keeping them is fine.
-                ctx.beginPath();
-                ctx.arc(cx, cy, Math.max(0, rPx), 0, Math.PI * 2);
-                ctx.fillStyle = fillStyle; 
-                ctx.fill();
-                ctx.lineWidth = 1; 
-                ctx.strokeStyle = strokeStyle; 
-                ctx.stroke();
 
                 // Draw Diffuser Body
                 const dSize = (d.performance.spec.A / 1000 * ppm) || 20;
@@ -521,7 +558,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
 
         requestRef.current = requestAnimationFrame(animate);
-    }, [width, height, isPowerOn, isPlaying, physics, temp, roomTemp, flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight, viewMode, roomWidth, roomLength, placedDiffusers, selectedDiffuserId, dragPreview, showHeatmap, velocityField, gridStep]);
+    }, [width, height, isPowerOn, isPlaying, physics, temp, roomTemp, flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight, viewMode, roomWidth, roomLength, placedDiffusers, selectedDiffuserId, dragPreview, showHeatmap, velocityField, gridStep, getLayout]);
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);
@@ -532,12 +569,22 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
 
 
     // --- MOUSE HANDLERS (TOP VIEW) ---
-    const getMousePos = (e: React.MouseEvent) => {
+    const getMousePos = (e: React.MouseEvent | React.TouchEvent) => {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return { x: 0, y: 0 };
+        
+        let clientX, clientY;
+        if ('touches' in e) {
+             clientX = e.touches[0].clientX;
+             clientY = e.touches[0].clientY;
+        } else {
+             clientX = (e as React.MouseEvent).clientX;
+             clientY = (e as React.MouseEvent).clientY;
+        }
+
         const scaleX = width / rect.width;
         const scaleY = height / rect.height;
-        return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
@@ -569,24 +616,18 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
     };
 
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (viewMode !== 'top' || e.button !== 0) {
-            if (isStickyDrag && e.button === 0) {
-                // Left click to place in sticky mode
-                setIsDragging(false);
-                setIsStickyDrag(false);
-            }
-            setContextMenu(null);
-            return;
-        }
+    const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+        if (viewMode !== 'top') return;
         
-        // Context menu check
-        setContextMenu(null); 
-
+        // Handle sticky drag termination for mouse
+        if ('button' in e && e.button !== 0) return;
+        
         // If sticky drag active, simple click places it.
         if (isStickyDrag) {
             setIsDragging(false);
             setIsStickyDrag(false);
+            onDragEnd && onDragEnd();
+            setContextMenu(null);
             return;
         }
 
@@ -611,6 +652,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         if (hitId) {
             onSelectDiffuser && onSelectDiffuser(hitId);
             setIsDragging(true);
+            onDragStart && onDragStart(); // Notify parent
             const d = placedDiffusers.find(d => d.id === hitId);
             if(d) {
                 const cx = originX + d.x * ppm;
@@ -620,9 +662,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         } else {
             onSelectDiffuser && onSelectDiffuser(''); // Deselect
         }
+        setContextMenu(null);
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDragging || !selectedDiffuserId || viewMode !== 'top') return;
         const { x: mouseX, y: mouseY } = getMousePos(e);
         const { ppm, originX, originY } = getLayout();
@@ -642,9 +685,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         onUpdateDiffuserPos && onUpdateDiffuserPos(selectedDiffuserId, newX, newY);
     };
 
-    const handleMouseUp = () => {
+    const handleEnd = () => {
         if (!isStickyDrag) {
             setIsDragging(false);
+            onDragEnd && onDragEnd();
         }
     };
 
@@ -656,6 +700,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             onSelectDiffuser && onSelectDiffuser(contextMenu.id);
             setIsDragging(true);
             setIsStickyDrag(true);
+            onDragStart && onDragStart();
             setDragOffset({ x: 0, y: 0 }); // Center on cursor for sticky drag
         } else if (action === 'delete' && onRemoveDiffuser) {
             onRemoveDiffuser(contextMenu.id);
@@ -664,6 +709,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             // We assume the new item becomes selected.
             setIsDragging(true);
             setIsStickyDrag(true);
+            onDragStart && onDragStart();
             setDragOffset({ x: 0, y: 0 }); // Center on cursor
         }
         
@@ -678,10 +724,14 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 height={height} 
                 className={`block w-full h-full touch-none ${viewMode === 'top' ? 'cursor-crosshair' : ''}`}
                 onContextMenu={handleContextMenu}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={() => !isStickyDrag && setIsDragging(false)}
+                onMouseDown={handleStart}
+                onMouseMove={handleMove}
+                onMouseUp={handleEnd}
+                onMouseLeave={handleEnd}
+                onTouchStart={handleStart}
+                onTouchMove={handleMove}
+                onTouchEnd={handleEnd}
+                style={{ touchAction: 'none' }}
             />
             {contextMenu && (
                 <div 
