@@ -50,6 +50,13 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
         return { round, rect: rect.slice(0, 50) }; // Limit rect results
     }, [volume, maxSpeed, mode]);
 
+    const getStatusColor = (speed: number) => {
+        if (speed === 0) return "text-slate-700";
+        if (speed >= minSpeed && speed <= maxSpeed) return "text-emerald-400 font-bold bg-emerald-500/10 shadow-[inset_0_0_10px_rgba(16,185,129,0.1)] border-emerald-500/20";
+        if (speed > maxSpeed) return "text-amber-500/50";
+        return "text-slate-600";
+    };
+
     return (
         <div className="flex w-full min-h-screen bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-emerald-500/30">
             {/* AMBIENT BACKGROUND */}
@@ -352,33 +359,6 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                     )}
                                 </div>
                              </div>
-                        </div>
-                    )}
-                    
-                    {/* Legend Footer */}
-                    {mode === 'check' && (
-                        <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 justify-end">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                <span>Оптимально ({minSpeed}-{maxSpeed} м/с)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-amber-700/70"></div>
-                                <span>Превышение ({'>'}{maxSpeed} м/с)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                                <span>Низкая скорость ({'<'}{minSpeed} м/с)</span>
-                            </div>
-                        </div>
-                    )}
-                     {mode === 'wizard' && (
-                        <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 justify-between">
-                            <div>Режим подбора</div>
-                            <div className="flex items-center gap-2">
-                                <Wand2 size={12} />
-                                <span>Показаны сечения с V ≤ {maxSpeed} м/с</span>
-                            </div>
                         </div>
                     )}
                 </div>

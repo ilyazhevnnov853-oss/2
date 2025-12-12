@@ -211,12 +211,6 @@ const AcousticCalculator = ({ onBack, onHome }: any) => {
                             </div>
                         </div>
                     </div>
-                    
-                    {/* Legend Footer */}
-                    <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                         <div>Формула: Lsum = 10 · log10( Σ 10^(0.1·Li) )</div>
-                         <div>Логарифмическое сложение</div>
-                    </div>
                 </div>
             </div>
         </div>

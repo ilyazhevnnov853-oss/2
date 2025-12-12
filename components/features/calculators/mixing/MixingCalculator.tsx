@@ -246,12 +246,6 @@ const MixingCalculator = ({ onBack, onHome }: any) => {
                             </div>
                         </div>
                     </div>
-                    
-                    {/* Legend Footer */}
-                    <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                         <div>Формула: t_mix = (L1·t1 + L2·t2) / (L1 + L2)</div>
-                         <div>Упрощенный тепловой баланс</div>
-                    </div>
                 </div>
             </div>
         </div>

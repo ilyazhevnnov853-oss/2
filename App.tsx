@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge } from 'lucide-react';
+import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge, CloudRain, Thermometer } from 'lucide-react';
 import Simulator from './components/features/simulators/airflow/Simulator';
 import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
 import HeaterCalculator from './components/features/calculators/heater/HeaterCalculator';
@@ -7,6 +7,8 @@ import AirExchangeCalculator from './components/features/calculators/exchange/Ai
 import PressureLossCalculator from './components/features/calculators/pressure/PressureLossCalculator';
 import AcousticCalculator from './components/features/calculators/acoustic/AcousticCalculator';
 import MixingCalculator from './components/features/calculators/mixing/MixingCalculator';
+import PsychrometryCalculator from './components/features/calculators/psychrometry/PsychrometryCalculator';
+import CoolingCalculator from './components/features/calculators/cooling/CoolingCalculator';
 import KnowledgeCenter from './components/features/knowledge/KnowledgeCenter';
 
 const App = () => {
@@ -89,7 +91,7 @@ const App = () => {
     );
 
     const renderCalculationsSection = () => (
-        <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
+        <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
              <div className="flex items-center gap-6 mb-10">
                 <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                     <ChevronLeft size={24}/>
@@ -156,6 +158,26 @@ const App = () => {
                         <p className="text-sm text-slate-400 font-medium">Расчет температуры смеси двух потоков</p>
                     </div>
                 </button>
+
+                 <button onClick={() => setAppMode('psychrometry-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-sky-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500 group-hover:text-white transition-colors shadow-lg">
+                        <CloudRain size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Влажный воздух</h3>
+                        <p className="text-sm text-slate-400 font-medium">Психрометрия: ID-диаграмма, энтальпия, точка росы</p>
+                    </div>
+                </button>
+
+                <button onClick={() => setAppMode('calc-cooling')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-cyan-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white transition-colors shadow-lg">
+                        <Thermometer size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Кондиционирование</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет теплопритоков</p>
+                    </div>
+                </button>
             </div>
         </div>
     );
@@ -220,6 +242,8 @@ const App = () => {
     if (appMode === 'pressure-calculator') return <PressureLossCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'acoustic-calculator') return <AcousticCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'mixing-calculator') return <MixingCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'psychrometry-calculator') return <PsychrometryCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'calc-cooling') return <CoolingCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
 
     return null;

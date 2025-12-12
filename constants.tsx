@@ -446,3 +446,27 @@ export const AVOK_SYMBOLS: SymbolItem[] = [
       )
   }
 ];
+
+export const SOLAR_GAINS = {
+    North: 50,  // Вт/м2
+    South: 250,
+    East: 450,
+    West: 550,  // Самое агрессивное солнце
+    Horizontal: 700 // Мансардные окна
+};
+
+export const WALL_TRANSMISSION = {
+    Brick_Old: 1.5, // Вт/м2*К (Старый кирпич)
+    Concrete: 2.0,  // Бетон без утепления
+    Modern: 0.5,    // Современная стена с утеплителем
+    Glass_Single: 5.8, // Однокамерный
+    Glass_Double: 2.8  // Двухкамерный
+};
+
+export const INTERNAL_LOADS = {
+    Person_Office: 120, // Вт
+    Person_Active: 250,
+    Computer: 200,
+    TV: 150,
+    Lighting_LED: 10 // Вт/м2
+};

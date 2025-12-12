@@ -319,12 +319,6 @@ const AirExchangeCalculator = ({ onBack, onHome }: any) => {
                              )}
                         </div>
                     </div>
-                    
-                    {/* Legend Footer */}
-                    <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                         <div>Формула: {mode === 'room' ? 'L = S · H · n' : 'L = N · Lnorm'}</div>
-                         <div>{mode === 'room' ? 'n - кратность воздухообмена' : 'Lnorm - норма воздуха на человека'}</div>
-                    </div>
                 </div>
             </div>
         </div>

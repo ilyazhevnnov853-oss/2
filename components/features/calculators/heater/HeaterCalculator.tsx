@@ -282,12 +282,6 @@ const HeaterCalculator = ({ onBack, onHome }: any) => {
 
                         </div>
                     </div>
-                    
-                    {/* Legend Footer */}
-                    <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                         <div>Формула: Q = L · ρ · c · ΔT</div>
-                         <div>p = 1.2 кг/м³ · c = 1.006 кДж/кг°C</div>
-                    </div>
                 </div>
             </div>
         </div>
