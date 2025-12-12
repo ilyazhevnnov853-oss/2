@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
-import { Calculator, Grid, CircleDot, Wind, Settings2, Home, ChevronLeft, Menu, X } from 'lucide-react';
-import { SectionHeader, GlassSlider } from '../../../ui/Shared';
+import React, { useState, useMemo } from 'react';
+import { Calculator, Grid, CircleDot, Wind, Settings2, Home, ChevronLeft, Menu, X, Table2, Wand2, CheckCircle2, ArrowRight } from 'lucide-react';
+import { SectionHeader, GlassSlider, GlassButton } from '../../../ui/Shared';
 
 const VelocityCalculator = ({ onBack, onHome }: any) => {
     const [volume, setVolume] = useState<number>(1000);
     const [minSpeed, setMinSpeed] = useState<number>(2);
-    const [maxSpeed, setMaxSpeed] = useState<number>(5);
+    const [maxSpeed, setMaxSpeed] = useState<number>(5); // Acts as Limit in Wizard
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [mode, setMode] = useState<'check' | 'wizard'>('check');
 
     // Data ranges
     const circularSizes = [100, 125, 160, 200, 250, 315, 355, 400, 450, 500, 630, 710, 800, 1000, 1250];
@@ -18,12 +19,36 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
         return volume / (3600 * area);
     };
 
-    const getStatusColor = (speed: number) => {
-        if (speed === 0) return "text-slate-700";
-        if (speed >= minSpeed && speed <= maxSpeed) return "text-emerald-400 font-bold bg-emerald-500/10 shadow-[inset_0_0_10px_rgba(16,185,129,0.1)] border-emerald-500/20";
-        if (speed > maxSpeed) return "text-amber-500/50";
-        return "text-slate-600";
-    };
+    // Wizard Logic
+    const suggestions = useMemo(() => {
+        if (mode !== 'wizard') return { round: [], rect: [] };
+
+        // Circular
+        const round = circularSizes.map(d => {
+            const area = Math.PI * Math.pow(d / 1000, 2) / 4;
+            const v = calculateSpeed(area);
+            return { d, v, area };
+        })
+        .filter(i => i.v <= maxSpeed && i.v > 0.5) // Filter valid
+        .sort((a, b) => b.v - a.v); // Sort closest to limit
+
+        // Rectangular
+        const rect = [];
+        for (let h of rectSizes) {
+            for (let w of rectSizes) {
+                if (w < h) continue; // standard format w >= h
+                const area = (w / 1000) * (h / 1000);
+                const v = calculateSpeed(area);
+                if (v <= maxSpeed && v > 0.5) {
+                    rect.push({ w, h, v, area });
+                }
+            }
+        }
+        // Heuristic sort: Closest to limit velocity (smallest suitable size)
+        rect.sort((a, b) => b.v - a.v);
+
+        return { round, rect: rect.slice(0, 50) }; // Limit rect results
+    }, [volume, maxSpeed, mode]);
 
     return (
         <div className="flex w-full min-h-screen bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-emerald-500/30">
@@ -32,7 +57,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] brightness-100 contrast-150 pointer-events-none"></div>
 
-            {/* LEFT PANEL (Controls & Circular) */}
+            {/* LEFT PANEL (Controls) */}
              <div className={`
                 fixed inset-0 z-50 bg-black/95 backdrop-blur-xl lg:static lg:bg-transparent
                 flex flex-col lg:w-[420px] h-screen shrink-0 transition-transform duration-300
@@ -68,12 +93,28 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Mode Switcher */}
+                        <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
+                            <button 
+                                onClick={() => setMode('check')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'check' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-500 hover:text-white'}`}
+                            >
+                                <Table2 size={14} /> Таблица
+                            </button>
+                            <button 
+                                onClick={() => setMode('wizard')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${mode === 'wizard' ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/20' : 'text-slate-500 hover:text-white'}`}
+                            >
+                                <Wand2 size={14} /> Подбор
+                            </button>
+                        </div>
                     </div>
 
                     {/* Controls Content */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-8">
                         
-                        {/* Inputs Section */}
+                        {/* Common Input */}
                         <div className="space-y-6">
                             <SectionHeader icon={<Settings2 size={14}/>} title="Параметры потока" />
                             
@@ -99,65 +140,97 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                         label=""
                                     />
                                 </div>
+                                
+                                {mode === 'check' && (
+                                    <div className="grid grid-cols-2 gap-3 pt-2">
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Мин. Скорость</div>
+                                            <div className="flex items-center gap-1">
+                                                <input 
+                                                    type="number" 
+                                                    value={minSpeed} 
+                                                    onChange={(e) => setMinSpeed(Number(e.target.value))} 
+                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
+                                                />
+                                                <span className="text-[10px] text-slate-600">м/с</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                                            <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Макс. Скорость</div>
+                                            <div className="flex items-center gap-1">
+                                                <input 
+                                                    type="number" 
+                                                    value={maxSpeed} 
+                                                    onChange={(e) => setMaxSpeed(Number(e.target.value))} 
+                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
+                                                />
+                                                <span className="text-[10px] text-slate-600">м/с</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
-                                <div className="grid grid-cols-2 gap-3 pt-2">
-                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                                        <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Мин. Скорость</div>
-                                        <div className="flex items-center gap-1">
-                                            <input 
-                                                type="number" 
-                                                value={minSpeed} 
-                                                onChange={(e) => setMinSpeed(Number(e.target.value))} 
-                                                className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
-                                            />
-                                            <span className="text-[10px] text-slate-600">м/с</span>
+                                {mode === 'wizard' && (
+                                     <div className="pt-2">
+                                         <div className="flex justify-between items-center mb-2">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Лимит скорости</span>
+                                            <div className="flex items-baseline gap-1">
+                                                <span className="text-lg font-bold font-mono text-white">{maxSpeed}</span>
+                                                <span className="text-[10px] font-bold text-slate-500">м/с</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
-                                        <div className="text-[9px] font-bold text-slate-500 uppercase mb-1">Макс. Скорость</div>
-                                        <div className="flex items-center gap-1">
-                                            <input 
-                                                type="number" 
-                                                value={maxSpeed} 
-                                                onChange={(e) => setMaxSpeed(Number(e.target.value))} 
-                                                className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
-                                            />
-                                            <span className="text-[10px] text-slate-600">м/с</span>
+                                        <GlassSlider 
+                                            val={maxSpeed} min={1} max={15} step={0.5} 
+                                            onChange={setMaxSpeed} 
+                                            gradient="from-teal-500 to-emerald-400"
+                                            icon={<Wind size={14}/>}
+                                            label=""
+                                        />
+                                        <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                                            <div className="flex items-center gap-2 mb-1 text-emerald-400">
+                                                <Wand2 size={14} />
+                                                <span className="text-[10px] font-bold uppercase">Автоподбор</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 leading-relaxed">
+                                                Система подберет сечения, в которых скорость не превышает {maxSpeed} м/с.
+                                            </p>
                                         </div>
-                                    </div>
+                                     </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Circular List for Check Mode Only */}
+                        {mode === 'check' && (
+                            <div className="space-y-4">
+                                <SectionHeader icon={<CircleDot size={14}/>} title="Круглые сечения" />
+                                <div className="grid grid-cols-2 gap-2">
+                                    {circularSizes.map(d => {
+                                        const area = Math.PI * Math.pow(d / 1000, 2) / 4;
+                                        const speed = calculateSpeed(area);
+                                        const isGood = speed >= minSpeed && speed <= maxSpeed;
+                                        
+                                        return (
+                                            <div key={d} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${isGood ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_4px_12px_rgba(16,185,129,0.1)]' : 'bg-white/5 border-white/5 opacity-60'}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${isGood ? 'bg-emerald-400' : 'bg-slate-600'}`}></div>
+                                                    <span className="font-mono text-xs font-bold text-slate-300">Ø{d}</span>
+                                                </div>
+                                                <span className={`font-mono text-xs font-bold ${isGood ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                                    {speed.toFixed(1)} <span className="text-[9px] opacity-70">м/с</span>
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Circular Ducts Section */}
-                        <div className="space-y-4">
-                            <SectionHeader icon={<CircleDot size={14}/>} title="Круглые сечения" />
-                            <div className="grid grid-cols-2 gap-2">
-                                {circularSizes.map(d => {
-                                    const area = Math.PI * Math.pow(d / 1000, 2) / 4;
-                                    const speed = calculateSpeed(area);
-                                    const isGood = speed >= minSpeed && speed <= maxSpeed;
-                                    
-                                    return (
-                                        <div key={d} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${isGood ? 'bg-emerald-500/10 border-emerald-500/20 shadow-[0_4px_12px_rgba(16,185,129,0.1)]' : 'bg-white/5 border-white/5 opacity-60'}`}>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${isGood ? 'bg-emerald-400' : 'bg-slate-600'}`}></div>
-                                                <span className="font-mono text-xs font-bold text-slate-300">Ø{d}</span>
-                                            </div>
-                                            <span className={`font-mono text-xs font-bold ${isGood ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                                {speed.toFixed(1)} <span className="text-[9px] opacity-70">м/с</span>
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
+                        )}
 
                     </div>
                 </div>
             </div>
 
-            {/* RIGHT CONTENT (Rectangular Matrix) */}
+            {/* RIGHT CONTENT */}
             <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
                 <div className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group flex flex-col">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
@@ -169,72 +242,145 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                             <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-3 rounded-full bg-blue-600 text-white shadow-lg"><Menu size={20} /></button>
                             <div>
                                 <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
-                                    <Grid className="text-emerald-500" size={24} />
-                                    Прямоугольные воздуховоды
+                                    {mode === 'check' ? <Grid className="text-emerald-500" size={24} /> : <Wand2 className="text-teal-500" size={24} />}
+                                    {mode === 'check' ? 'Прямоугольные воздуховоды' : 'Результаты подбора'}
                                 </h2>
-                                <p className="text-xs text-slate-400 font-medium mt-1 uppercase tracking-wider ml-9">Таблица скоростей (м/с)</p>
+                                <p className="text-xs text-slate-400 font-medium mt-1 uppercase tracking-wider ml-9">
+                                    {mode === 'check' ? 'Таблица скоростей (м/с)' : `Подходящие сечения (V ≤ ${maxSpeed} м/с)`}
+                                </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Matrix */}
-                    <div className="flex-1 overflow-auto custom-scrollbar p-6 pt-0 relative z-10">
-                         <div className="inline-block min-w-full align-middle">
-                            <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/20 backdrop-blur-sm">
-                                <table className="min-w-full divide-y divide-white/10">
-                                    <thead className="bg-[#0f172a]/90 sticky top-0 z-20 backdrop-blur-md">
-                                        <tr>
-                                            <th scope="col" className="sticky left-0 z-30 bg-[#0f172a] p-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-white/10 shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
-                                                A x B (мм)
-                                            </th>
-                                            {rectSizes.map(w => (
-                                                <th key={w} scope="col" className="p-3 text-center text-[10px] font-bold text-slate-400 font-mono border-l border-white/5 min-w-[60px]">
-                                                    {w}
+                    {/* CONTENT AREA */}
+                    {mode === 'check' ? (
+                        // EXISTING CHECK MODE (MATRIX)
+                        <div className="flex-1 overflow-auto custom-scrollbar p-6 pt-0 relative z-10">
+                            <div className="inline-block min-w-full align-middle">
+                                <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40 backdrop-blur-sm shadow-2xl">
+                                    <table className="min-w-full divide-y divide-white/5 border-collapse">
+                                        <thead className="bg-[#0a0a0f] sticky top-0 z-20 shadow-lg">
+                                            <tr>
+                                                <th scope="col" className="sticky left-0 z-30 bg-[#0a0a0f] p-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-white/10 shadow-[4px_0_12px_rgba(0,0,0,0.5)] min-w-[100px]">
+                                                    A x B (мм)
                                                 </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {rectSizes.map(h => (
-                                            <tr key={h} className="hover:bg-white/5 transition-colors">
-                                                <td className="sticky left-0 z-10 bg-[#0b0c15] p-3 text-[11px] font-bold text-slate-300 font-mono border-r border-white/10 shadow-[4px_0_12px_rgba(0,0,0,0.5)]">
-                                                    {h}
-                                                </td>
-                                                {rectSizes.map(w => {
-                                                    const area = (w / 1000) * (h / 1000);
-                                                    const speed = calculateSpeed(area);
-                                                    const statusClass = getStatusColor(speed);
-                                                    return (
-                                                        <td key={`${h}x${w}`} className={`p-2 text-center border-l border-white/5 transition-colors duration-300 ${statusClass.includes('bg-emerald') ? 'bg-emerald-500/5 hover:bg-emerald-500/10' : ''}`}>
-                                                            <div className={`text-xs font-mono font-medium ${statusClass}`}>
-                                                                {speed.toFixed(1)}
-                                                            </div>
-                                                        </td>
-                                                    );
-                                                })}
+                                                {rectSizes.map(w => (
+                                                    <th key={w} scope="col" className="p-2 text-center text-[10px] font-bold text-slate-400 font-mono border-l border-white/5 min-w-[50px] bg-[#0a0a0f]">
+                                                        {w}
+                                                    </th>
+                                                ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5 bg-[#050508]">
+                                            {rectSizes.map(h => (
+                                                <tr key={h} className="group hover:bg-white/[0.02] transition-colors">
+                                                    <td className="sticky left-0 z-10 bg-[#0a0a0f] p-3 text-[11px] font-bold text-slate-400 font-mono border-r border-white/10 shadow-[4px_0_12px_rgba(0,0,0,0.5)] group-hover:text-white transition-colors">
+                                                        {h}
+                                                    </td>
+                                                    {rectSizes.map(w => {
+                                                        const area = (w / 1000) * (h / 1000);
+                                                        const speed = calculateSpeed(area);
+                                                        
+                                                        const isOptimal = speed >= minSpeed && speed <= maxSpeed;
+                                                        const isHigh = speed > maxSpeed;
+                                                        const isLow = speed < minSpeed;
+
+                                                        return (
+                                                            <td key={`${h}x${w}`} className="p-1 text-center border-l border-white/5 border-b border-white/5">
+                                                                <div className={`
+                                                                    w-full h-8 flex items-center justify-center text-xs font-mono transition-all duration-300 rounded
+                                                                    ${isOptimal ? 'bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.05)]' : ''}
+                                                                    ${isHigh ? 'text-amber-700/70' : ''}
+                                                                    ${isLow ? 'text-slate-800' : ''}
+                                                                `}>
+                                                                    {speed.toFixed(1)}
+                                                                </div>
+                                                            </td>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        // NEW WIZARD MODE (LIST)
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-0 relative z-10 space-y-8 animate-in slide-in-from-right-8 duration-500">
+                             
+                             {/* Circular Section */}
+                             <div>
+                                <SectionHeader icon={<CircleDot size={16}/>} title="Круглые воздуховоды" />
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4">
+                                    {suggestions.round.length > 0 ? suggestions.round.map((item, i) => (
+                                        <div key={item.d} className={`relative p-4 rounded-2xl border transition-all hover:scale-[1.02] ${i === 0 ? 'bg-teal-500/20 border-teal-500/50 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
+                                            {i === 0 && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-teal-500 text-black text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shadow-lg">Optimal</div>}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="font-mono text-xl font-bold text-white">Ø{item.d}</span>
+                                                <CheckCircle2 size={16} className={i === 0 ? "text-teal-400" : "text-slate-600"} />
+                                            </div>
+                                            <div className="flex items-end justify-between">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase">Скорость</div>
+                                                <div className={`font-mono text-lg font-bold ${i === 0 ? 'text-teal-300' : 'text-slate-300'}`}>{item.v.toFixed(2)} <span className="text-[10px]">м/с</span></div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="col-span-full py-8 text-center text-slate-500 text-sm italic">Нет подходящих круглых сечений</div>
+                                    )}
+                                </div>
+                             </div>
+
+                             {/* Rectangular Section */}
+                             <div>
+                                <SectionHeader icon={<Grid size={16}/>} title="Прямоугольные (Топ 50)" />
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 mt-4 pb-10">
+                                    {suggestions.rect.length > 0 ? suggestions.rect.map((item, i) => (
+                                        <div key={`${item.w}x${item.h}`} className={`relative p-4 rounded-2xl border transition-all hover:scale-[1.02] ${i === 0 ? 'bg-emerald-500/20 border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}>
+                                             {i === 0 && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-[9px] font-bold uppercase px-2 py-0.5 rounded-full shadow-lg">Optimal</div>}
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="font-mono text-lg font-bold text-white">{item.w}×{item.h}</span>
+                                                <ArrowRight size={14} className="text-slate-600" />
+                                            </div>
+                                            <div className="flex items-end justify-between">
+                                                <div className="text-[10px] text-slate-500 font-bold uppercase">Скорость</div>
+                                                <div className={`font-mono text-lg font-bold ${i === 0 ? 'text-emerald-300' : 'text-slate-300'}`}>{item.v.toFixed(2)} <span className="text-[10px]">м/с</span></div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="col-span-full py-8 text-center text-slate-500 text-sm italic">Нет подходящих прямоугольных сечений</div>
+                                    )}
+                                </div>
+                             </div>
+                        </div>
+                    )}
                     
                     {/* Legend Footer */}
-                    <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 justify-end">
-                        <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                             <span>Оптимально ({minSpeed}-{maxSpeed} м/с)</span>
+                    {mode === 'check' && (
+                        <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 justify-end">
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                                <span>Оптимально ({minSpeed}-{maxSpeed} м/с)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-amber-700/70"></div>
+                                <span>Превышение ({'>'}{maxSpeed} м/с)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-slate-700"></div>
+                                <span>Низкая скорость ({'<'}{minSpeed} м/с)</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-amber-500/50"></div>
-                             <span>Превышение ({'>'}{maxSpeed} м/с)</span>
+                    )}
+                     {mode === 'wizard' && (
+                        <div className="p-4 border-t border-white/5 bg-black/40 backdrop-blur-md flex gap-6 text-[10px] font-bold uppercase tracking-widest text-slate-500 justify-between">
+                            <div>Режим подбора</div>
+                            <div className="flex items-center gap-2">
+                                <Wand2 size={12} />
+                                <span>Показаны сечения с V ≤ {maxSpeed} м/с</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                             <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                             <span>Низкая скорость ({'<'}{minSpeed} м/с)</span>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

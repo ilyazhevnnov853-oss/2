@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft } from 'lucide-react';
+import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge } from 'lucide-react';
 import Simulator from './components/features/simulators/airflow/Simulator';
 import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
+import HeaterCalculator from './components/features/calculators/heater/HeaterCalculator';
+import AirExchangeCalculator from './components/features/calculators/exchange/AirExchangeCalculator';
+import PressureLossCalculator from './components/features/calculators/pressure/PressureLossCalculator';
+import AcousticCalculator from './components/features/calculators/acoustic/AcousticCalculator';
+import MixingCalculator from './components/features/calculators/mixing/MixingCalculator';
 import KnowledgeCenter from './components/features/knowledge/KnowledgeCenter';
 
 const App = () => {
@@ -97,8 +102,58 @@ const App = () => {
                         <Calculator size={24} />
                     </div>
                     <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Калькулятор Скорости</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет скорости воздуха в воздуховодах</p>
+                        <h3 className="text-2xl font-bold text-white mb-2">Скорость воздуха</h3>
+                        <p className="text-sm text-slate-400 font-medium">Подбор сечения воздуховода по скорости</p>
+                    </div>
+                </button>
+
+                <button onClick={() => setAppMode('heater-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-orange-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors shadow-lg">
+                        <Zap size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Мощность калорифера</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет нагрева и охлаждения воздуха</p>
+                    </div>
+                </button>
+
+                 <button onClick={() => setAppMode('exchange-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-blue-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors shadow-lg">
+                        <Users size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Расчет воздухообмена</h3>
+                        <p className="text-sm text-slate-400 font-medium">По кратности и количеству людей</p>
+                    </div>
+                </button>
+
+                <button onClick={() => setAppMode('pressure-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-purple-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-colors shadow-lg">
+                        <Gauge size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Потери давления</h3>
+                        <p className="text-sm text-slate-400 font-medium">Аэродинамический расчет на трение и КМС</p>
+                    </div>
+                </button>
+
+                <button onClick={() => setAppMode('acoustic-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-rose-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors shadow-lg">
+                        <Volume2 size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Суммирование шума</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет общего уровня звукового давления</p>
+                    </div>
+                </button>
+
+                <button onClick={() => setAppMode('mixing-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-cyan-500/30">
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white transition-colors shadow-lg">
+                        <GitMerge size={24} />
+                    </div>
+                    <div>
+                        <h3 className="text-2xl font-bold text-white mb-2">Смешение воздуха</h3>
+                        <p className="text-sm text-slate-400 font-medium">Расчет температуры смеси двух потоков</p>
                     </div>
                 </button>
             </div>
@@ -160,6 +215,11 @@ const App = () => {
 
     if (appMode === 'simulator') return <Simulator onBack={goBack} onHome={goHome} />;
     if (appMode === 'calculator') return <VelocityCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'heater-calculator') return <HeaterCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'exchange-calculator') return <AirExchangeCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'pressure-calculator') return <PressureLossCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'acoustic-calculator') return <AcousticCalculator onBack={goBack} onHome={goHome} />;
+    if (appMode === 'mixing-calculator') return <MixingCalculator onBack={goBack} onHome={goHome} />;
     if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
 
     return null;
