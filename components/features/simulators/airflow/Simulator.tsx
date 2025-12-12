@@ -65,7 +65,8 @@ const Simulator = ({ onBack, onHome }: any) => {
     
     useEffect(() => {
         if (viewMode !== 'top' || placedDiffusers.length === 0) { setVelocityField([]); return; }
-        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, 0.5));
+        // Use 0.1 (10cm) step for higher resolution heatmap as requested
+        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, 0.1));
     }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode]);
     
     useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
@@ -129,9 +130,17 @@ const Simulator = ({ onBack, onHome }: any) => {
         const original = placedDiffusers.find(d => d.id === id);
         if (!original) return;
         const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
+        
         let newX = Math.min(params.roomWidth - 0.5, Math.max(0, original.x + 0.5));
         let newY = Math.min(params.roomLength - 0.5, Math.max(0, original.y + 0.5));
-        const newDiffuser: PlacedDiffuser = { ...original, id: `d-${Date.now()}`, index: nextIndex, x: newX, y: newY };
+        
+        const newDiffuser: PlacedDiffuser = { 
+            ...original, 
+            id: `d-${Date.now()}`, 
+            index: nextIndex, 
+            x: newX, 
+            y: newY 
+        };
         setPlacedDiffusers([...placedDiffusers, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
     };
@@ -214,8 +223,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                         diffuserHeight={params.diffuserHeight} workZoneHeight={params.workZoneHeight}
                         viewMode={viewMode} placedDiffusers={placedDiffusers} 
                         onUpdateDiffuserPos={updateDiffuserPosition} onSelectDiffuser={setSelectedDiffuserId}
-                        onRemoveDiffuser={removeDiffuser} selectedDiffuserId={selectedDiffuserId}
-                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={0.5} dragPreview={dragPreview}
+                        onRemoveDiffuser={removeDiffuser} onDuplicateDiffuser={duplicateDiffuser} selectedDiffuserId={selectedDiffuserId}
+                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={0.1} dragPreview={dragPreview}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                     />
                 </div>

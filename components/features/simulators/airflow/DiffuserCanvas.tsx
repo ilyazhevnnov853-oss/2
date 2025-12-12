@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { PerformanceResult, PlacedDiffuser } from '../../types';
+import { Trash2, Move, Copy, X } from 'lucide-react';
 
 const CONSTANTS = {
   DEFAULT_ROOM_HEIGHT: 3.5,
@@ -30,6 +31,7 @@ interface DiffuserCanvasProps {
   onUpdateDiffuserPos?: (id: string, x: number, y: number) => void;
   onSelectDiffuser?: (id: string) => void;
   onRemoveDiffuser?: (id: string) => void;
+  onDuplicateDiffuser?: (id: string) => void;
   selectedDiffuserId?: string | null;
   showHeatmap?: boolean;
   velocityField?: number[][];
@@ -43,7 +45,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
     width, height, physics, isPowerOn, isPlaying, temp, roomTemp, 
     flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight,
     roomWidth = 6, roomLength = 6, viewMode = 'side', placedDiffusers = [], 
-    onUpdateDiffuserPos, onSelectDiffuser, selectedDiffuserId, 
+    onUpdateDiffuserPos, onSelectDiffuser, onRemoveDiffuser, onDuplicateDiffuser, selectedDiffuserId, 
     dragPreview, snapToGrid, gridSnapSize,
     showHeatmap, velocityField, gridStep
 }) => {
@@ -54,7 +56,11 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
     
     // State for dragging in Top View
     const [isDragging, setIsDragging] = useState(false);
+    const [isStickyDrag, setIsStickyDrag] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    
+    // Context Menu State
+    const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
 
     const getGlowColor = (t: number) => {
         if (t <= 18) return `64, 224, 255`; 
@@ -302,20 +308,41 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             ctx.lineWidth = 2;
             ctx.strokeRect(originX, originY, roomPixW, roomPixL);
 
-            // Grid
+            // Grid (New Dual Grid: 10cm minor, 1m major)
             if (showGrid) {
-                ctx.lineWidth = 1;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-                const step = 0.5 * ppm;
-                
+                // Minor lines (every 10cm)
                 ctx.beginPath();
-                for (let x = 0; x <= roomPixW; x += step) {
-                    ctx.moveTo(originX + x, originY);
-                    ctx.lineTo(originX + x, originY + roomPixL);
+                ctx.lineWidth = 0.5;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+                for (let x = 0; x <= roomWidth; x += 0.1) {
+                    if (Math.abs(x % 1) > 0.01) { // Skip major lines
+                        const px = x * ppm;
+                        ctx.moveTo(originX + px, originY);
+                        ctx.lineTo(originX + px, originY + roomPixL);
+                    }
                 }
-                for (let y = 0; y <= roomPixL; y += step) {
-                    ctx.moveTo(originX, originY + y);
-                    ctx.lineTo(originX + roomPixW, originY + y);
+                for (let y = 0; y <= roomLength; y += 0.1) {
+                    if (Math.abs(y % 1) > 0.01) {
+                        const py = y * ppm;
+                        ctx.moveTo(originX, originY + py);
+                        ctx.lineTo(originX + roomPixW, originY + py);
+                    }
+                }
+                ctx.stroke();
+
+                // Major lines (every 1m)
+                ctx.beginPath();
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; // Stronger visibility
+                for (let x = 0; x <= roomWidth; x += 1) {
+                    const px = x * ppm;
+                    ctx.moveTo(originX + px, originY);
+                    ctx.lineTo(originX + px, originY + roomPixL);
+                }
+                for (let y = 0; y <= roomLength; y += 1) {
+                    const py = y * ppm;
+                    ctx.moveTo(originX, originY + py);
+                    ctx.lineTo(originX + roomPixW, originY + py);
                 }
                 ctx.stroke();
             }
@@ -513,8 +540,56 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
     };
 
+    const handleContextMenu = (e: React.MouseEvent) => {
+        if (viewMode !== 'top') return;
+        e.preventDefault();
+        const { x: mouseX, y: mouseY } = getMousePos(e);
+        const { ppm, originX, originY } = getLayout();
+
+        // Hit detection reversed to select top-most
+        let hitId = null;
+        for (let i = placedDiffusers.length - 1; i >= 0; i--) {
+            const d = placedDiffusers[i];
+            const cx = originX + d.x * ppm;
+            const cy = originY + d.y * ppm;
+            const hitSize = Math.max((d.performance.spec.A / 1000 * ppm), 40); // Minimum hit area
+            
+            if (mouseX >= cx - hitSize/2 && mouseX <= cx + hitSize/2 && 
+                mouseY >= cy - hitSize/2 && mouseY <= cy + hitSize/2) {
+                hitId = d.id;
+                break;
+            }
+        }
+
+        if (hitId) {
+            setContextMenu({ x: e.clientX, y: e.clientY, id: hitId });
+            onSelectDiffuser && onSelectDiffuser(hitId);
+        } else {
+            setContextMenu(null);
+        }
+    };
+
     const handleMouseDown = (e: React.MouseEvent) => {
-        if (viewMode !== 'top' || e.button !== 0) return;
+        if (viewMode !== 'top' || e.button !== 0) {
+            if (isStickyDrag && e.button === 0) {
+                // Left click to place in sticky mode
+                setIsDragging(false);
+                setIsStickyDrag(false);
+            }
+            setContextMenu(null);
+            return;
+        }
+        
+        // Context menu check
+        setContextMenu(null); 
+
+        // If sticky drag active, simple click places it.
+        if (isStickyDrag) {
+            setIsDragging(false);
+            setIsStickyDrag(false);
+            return;
+        }
+
         const { x: mouseX, y: mouseY } = getMousePos(e);
         const { ppm, originX, originY } = getLayout();
 
@@ -567,20 +642,71 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         onUpdateDiffuserPos && onUpdateDiffuserPos(selectedDiffuserId, newX, newY);
     };
 
-    const handleMouseUp = () => setIsDragging(false);
+    const handleMouseUp = () => {
+        if (!isStickyDrag) {
+            setIsDragging(false);
+        }
+    };
+
+    // Context Menu Logic
+    const handleContextAction = (action: 'move' | 'delete' | 'duplicate') => {
+        if (!contextMenu) return;
+        
+        if (action === 'move') {
+            onSelectDiffuser && onSelectDiffuser(contextMenu.id);
+            setIsDragging(true);
+            setIsStickyDrag(true);
+            setDragOffset({ x: 0, y: 0 }); // Center on cursor for sticky drag
+        } else if (action === 'delete' && onRemoveDiffuser) {
+            onRemoveDiffuser(contextMenu.id);
+        } else if (action === 'duplicate' && onDuplicateDiffuser) {
+            onDuplicateDiffuser(contextMenu.id);
+            // We assume the new item becomes selected.
+            setIsDragging(true);
+            setIsStickyDrag(true);
+            setDragOffset({ x: 0, y: 0 }); // Center on cursor
+        }
+        
+        setContextMenu(null);
+    };
 
     return (
-        <canvas 
-            ref={canvasRef} 
-            width={width} 
-            height={height} 
-            className={`block w-full h-full touch-none ${viewMode === 'top' ? 'cursor-crosshair' : ''}`}
-            onContextMenu={(e) => e.preventDefault()}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-        />
+        <div className="relative w-full h-full">
+            <canvas 
+                ref={canvasRef} 
+                width={width} 
+                height={height} 
+                className={`block w-full h-full touch-none ${viewMode === 'top' ? 'cursor-crosshair' : ''}`}
+                onContextMenu={handleContextMenu}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={() => !isStickyDrag && setIsDragging(false)}
+            />
+            {contextMenu && (
+                <div 
+                    className="fixed z-50 bg-[#1a1b26] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-1.5 flex flex-col min-w-[160px] animate-in zoom-in-95 duration-200 origin-top-left backdrop-blur-xl"
+                    style={{ left: contextMenu.x, top: contextMenu.y }}
+                >
+                    <div className="px-3 py-2 border-b border-white/5 mb-1 flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Действия</span>
+                        <button onClick={() => setContextMenu(null)} className="text-slate-500 hover:text-white transition-colors"><X size={12}/></button>
+                    </div>
+                    <button onClick={() => handleContextAction('move')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
+                        <Move size={14} className="text-blue-400" />
+                        <span>Переместить</span>
+                    </button>
+                    <button onClick={() => handleContextAction('duplicate')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
+                        <Copy size={14} className="text-emerald-400" />
+                        <span>Дублировать</span>
+                    </button>
+                    <button onClick={() => handleContextAction('delete')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors text-left">
+                        <Trash2 size={14} />
+                        <span>Удалить</span>
+                    </button>
+                </div>
+            )}
+        </div>
     );
 };
 
