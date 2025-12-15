@@ -6,39 +6,38 @@ import { PerformanceResult, Spec } from '../types';
 // 4. PHYSICS & SIMULATION LOGIC
 // ==========================================
 
-const V_TERMINAL = 0.2; // м/с - комфортная скорость в рабочей зоне
-const C_EXPANSION = 0.2; // Коэффициент расширения струи (тангенс угла расширения)
-
 export const interpolate = (val: number, x0: number, x1: number, y0: number, y1: number): number => {
     if (x1 === x0) return y0;
     return y0 + ((val - x0) * (y1 - y0)) / (x1 - x0);
 };
 
+// --- ГЛАВНАЯ ФУНКЦИЯ РАСЧЕТА СКОРОСТИ ---
+// Теперь принимает buoyancyFactor, чтобы температура влияла на результат
 export const calculateWorkzoneVelocityAndCoverage = (
     v0: number, 
     spec_A: number, // Ak (Effective Area) in mm²
     diffuserHeight: number, 
     workZoneHeight: number,
-    m: number = 2.0 // Аэродинамический коэффициент формы (для решеток ~2-3, для сопел ~5-6)
+    m: number = 2.0, // Аэродинамический коэффициент формы
+    buoyancyFactor: number = 1.0 // <--- НОВЫЙ ПАРАМЕТР: Влияние температуры
 ) => {
     const dist = diffuserHeight - workZoneHeight;
     
-    // Эффективный диаметр (характерный размер)
-    // spec_A приходит в mm², переводим в м² для расчета l0 (в метрах)
+    // Переводим площадь в метры для физики
     const Ak_m2 = spec_A > 0 ? spec_A / 1000000 : 0; 
     const l0 = Math.sqrt(Ak_m2); 
-    const coreZone = 5 * l0; // Длина начального участка примерно 5 калибров
+    const coreZone = 5 * l0; 
 
+    // Если мы прямо в диффузоре
     if (dist <= 0) {
-        // Внутри диффузора или выше
-        const initialRadius = Math.sqrt(spec_A) / 2000.0; // Примерный радиус в метрах
+        const initialRadius = Math.sqrt(spec_A) / 2000.0;
         return { workzoneVelocity: v0, coverageRadius: initialRadius };
     }
 
     let vx = v0;
     
     if (dist < coreZone) {
-        // Зона 1: Скорость постоянна на начальном участке
+        // Зона 1: Скорость постоянна
         vx = v0;
     } else {
         // Зона 3: Гиперболическое затухание Vx = (m * V0 * sqrt(Ak)) / x
@@ -47,23 +46,25 @@ export const calculateWorkzoneVelocityAndCoverage = (
         }
     }
 
-    // Ограничиваем, чтобы не уходила в бесконечность и не была меньше подвижности воздуха
-    vx = Math.min(v0, Math.max(0.1, vx));
+    // --- ПРИМЕНЯЕМ ВЛИЯНИЕ ТЕМПЕРАТУРЫ ---
+    // Здесь мы замыкаем круг: Температура -> Ar -> buoyancyFactor -> Скорость
+    vx = vx * buoyancyFactor;
+
+    // Физические ограничения (скорость не может быть отрицательной или бесконечной)
+    vx = Math.min(v0 * 1.5, Math.max(0.05, vx)); 
 
     // Расчет радиуса (линейное расширение)
-    // r = r0 + x * tan(alpha)
     const initialRadius = Math.sqrt(spec_A) / 2000.0; 
-    const coverageRadius = initialRadius + dist * 0.2; // 0.2 ~ tan(11.3 градуса)
+    const coverageRadius = initialRadius + dist * 0.2; 
     
     return { workzoneVelocity: vx, coverageRadius };
 };
 
 export const calculatePerformance = (modelId: string, flowType: string, diameter: string | number, volume: number): Partial<PerformanceResult> | null => {
-    // SPECS и ENGINEERING_DATA должны быть доступны в области видимости
     const spec = SPECS[diameter];
     if (!spec) return null;
 
-    // Exclusions
+    // Исключения для несовместимых моделей
     if (modelId === 'dpu-s' && diameter === 100) return null;
     if (modelId === 'dpu-v' && diameter === 250) return null;
     if ((modelId === 'amn-adn' || modelId === '4ap') && typeof diameter === 'number') return null;
@@ -79,6 +80,7 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         return null;
     }
     
+    // Интерполяция табличных данных
     let pressure = 0, noise = 0, throwDist = 0;
     if (modePoints.length > 0) {
         let p1 = modePoints[0];
@@ -97,12 +99,10 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         throwDist = interpolate(volume, p1.vol, p2.vol, p1.throw, p2.throw);
     }
 
-    // --- 1. Внедрение коэффициента эффективной площади (Ak) ---
-    // spec.f0 - это живое сечение (м²) из базы данных
+    // Расчет начальной скорости V0 через эффективное сечение
     const Ak = spec.f0; 
     const v0 = Ak > 0 ? volume / (3600 * Ak) : 0;
 
-    // Physics fallback if throwDist missing from data
     if (throwDist === 0 && flowType === 'suction') {
          throwDist = Math.sqrt(v0 / 2.0); 
     }
@@ -133,40 +133,52 @@ export const useScientificSimulation = (
 
         const { v0 = 0, pressure = 0, noise = 0, throwDist = 0, spec } = perf;
 
-        // Добавляем расчет скорости и области захвата в рабочей зоне (с гиперболическим затуханием)
-        // Для spec.A используется геометрический параметр, для расчета физики используем f0 (Ak) если возможно, или приближаем
-        // В базе A часто сторона или диаметр в мм. Преобразуем f0 (м2) в мм2 для функции
-        const Ak_mm2 = spec.f0 * 1000000; 
-        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
-            v0, Ak_mm2, diffuserHeight, workZoneHeight
-        );
-
-        // --- 2. Внедрение числа Архимеда (Ar) ---
-        // Ar = (g * beta * dt * sqrt(Ak)) / v0^2
+        // --- ФИЗИЧЕСКИЙ ДВИЖОК ---
+        
         const g = 9.81;
-        const T_ref = 273.15 + roomTemp; // Абсолютная температура (K)
-        const beta = 1 / T_ref;
-        const dt = temp - roomTemp;
-        const l0 = Math.sqrt(spec.f0); // Характерный размер (корень из площади)
+        // Перевод температур в Кельвины для расчета плотности
+        const T_ref = 273.15 + roomTemp; 
+        const beta = 1 / T_ref; // Коэффициент объемного расширения
+        const dt = temp - roomTemp; // Разница температур (Приток - Комната)
+        const l0 = Math.sqrt(spec.f0); // Характерный размер
 
-        // Защита от деления на ноль
+        // 1. Число Архимеда (Ar)
+        // Характеризует борьбу инерции (v0) и плавучести (dt)
         const Ar = v0 > 0.1 
             ? (g * beta * dt * l0) / (v0 * v0) 
             : 0;
 
-        // Используем Ar для корректировки дальнобойности (throwDist)
-        // Для неизотермических струй: x_noniso = x_iso * k_noniso
+        // 2. Коэффициент влияния Архимеда (k_archimedes)
+        // Этот коэффициент показывает, как меняется импульс струи из-за температуры
         let k_archimedes = 1.0;
         
         if (flowType.includes('vertical')) {
-             if (Math.abs(Ar) > 0.001) {
-                // Если Ar > 0 (нагрев, всплывает) -> струя тормозится быстрее
-                // Если Ar < 0 (охлаждение, падает) -> струя разгоняется
-                k_archimedes = 1.0 - 1.5 * Ar; 
+             // Ar > 0 (нагрев): сила Архимеда направлена вверх, против движения струи -> торможение
+             // Ar < 0 (охлаждение): сила Архимеда направлена вниз, по движению -> ускорение
+             if (Math.abs(Ar) > 0.0001) {
+                // Коэффициент 1.5 - эмпирическая поправка для турбулентных струй
+                k_archimedes = 1.0 - (1.5 * Ar); 
+                
+                // Ограничители реальности
+                k_archimedes = Math.max(0.1, Math.min(2.5, k_archimedes));
              }
         }
 
+        // 3. Применяем коэффициент ко всем параметрам
+        
+        // Дальнобойность меняется
         const finalThrow = Math.max(0, throwDist * k_archimedes);
+
+        // Скорость в рабочей зоне меняется!
+        const Ak_mm2 = spec.f0 * 1000000; 
+        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
+            v0, 
+            Ak_mm2, 
+            diffuserHeight, 
+            workZoneHeight,
+            2.0,          // m (форма струи)
+            k_archimedes  // <--- ВОТ ОНО: Передаем влияние температуры в расчет скорости
+        );
 
         return {
             v0: Math.max(0, v0),
@@ -176,7 +188,7 @@ export const useScientificSimulation = (
             workzoneVelocity: Math.max(0, workzoneVelocity),
             coverageRadius: Math.max(0, coverageRadius),
             spec,
-            Ar, // Возвращаем Ar для визуализации
+            Ar, // Нужно для визуализации частиц в Canvas
             error: null
         };
     }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
