@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
     Home, ChevronLeft, ChevronRight, Lock, CheckCircle2, 
-    Sun, Users, Wind, BarChart3, Box, Menu, X, Thermometer, Compass
+    Sun, Users, Wind, BarChart3, Box, Menu, X, Thermometer, Compass, Globe
 } from 'lucide-react';
 import { GlassButton, GlassSlider, SectionHeader } from '../../../ui/Shared';
 import { SOLAR_GAINS, WALL_TRANSMISSION, INTERNAL_LOADS } from '../../../../constants';
@@ -19,6 +19,7 @@ interface CalcData {
     glassArea: number;
     isSkylight: boolean; // Replaces 'orientation' logic for Horizontal
     glassType: 'Glass_Single' | 'Glass_Double';
+    climateCoef: number; // Климатический коэффициент (СП 131.13330)
     
     // Шаг 3: Внутренние
     people: number;
@@ -38,7 +39,7 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
     
     const [data, setData] = useState<CalcData>({
         width: 0, length: 0, height: 3.0, wallType: 'Modern', azimuth: 180,
-        glassArea: 0, isSkylight: false, glassType: 'Glass_Double',
+        glassArea: 0, isSkylight: false, glassType: 'Glass_Double', climateCoef: 1.0,
         people: 0, computers: 0, lighting: true,
         ventilationOn: false, airFlow: 0
     });
@@ -64,7 +65,8 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
         const q_walls = wallArea * WALL_TRANSMISSION[data.wallType] * dt;
 
         // 2. Солнечная радиация + Теплопередача окон
-        const q_sun = data.glassArea * SOLAR_GAINS[orientationKey];
+        // Учитываем климатический коэффициент (СП 131.13330)
+        const q_sun = data.glassArea * SOLAR_GAINS[orientationKey] * data.climateCoef;
         const q_glass_trans = data.glassArea * WALL_TRANSMISSION[data.glassType] * dt;
         const q_total_windows = q_sun + q_glass_trans;
 
@@ -298,6 +300,20 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
                                                     {data.isSkylight ? 'ГОРИЗОНТАЛЬНО' : getCardinalLabel(data.azimuth).toUpperCase()}
                                                  </span>
                                             </div>
+                                        </div>
+
+                                        <div className="pt-2 border-t border-white/5">
+                                            <GlassSlider 
+                                                label="Климатический коэфф." 
+                                                icon={<Globe size={14}/>} 
+                                                val={data.climateCoef} 
+                                                min={0.8} max={1.5} step={0.1} 
+                                                onChange={(v:number) => setData({...data, climateCoef: v})} 
+                                                unit=""
+                                            />
+                                            <p className="text-[9px] text-slate-500 mt-2 pl-1">
+                                                Коэффициент инсоляции зависит от региона (СП 131.13330).
+                                            </p>
                                         </div>
                                      </div>
                                 </div>

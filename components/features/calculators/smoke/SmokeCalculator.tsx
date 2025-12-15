@@ -315,6 +315,15 @@ const SmokeCalculator = ({ onBack, onHome }: any) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* WARNING DISCLAIMER (SP 7.13130) */}
+                            <div className="mt-4 bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20 flex items-start gap-3">
+                                <AlertTriangle size={24} className="text-amber-500 shrink-0" />
+                                <p className="text-xs text-amber-200/80 text-left leading-relaxed">
+                                    <span className="font-bold text-amber-500 block mb-1">Внимание</span>
+                                    Расчет является предварительным (стадия Концепция). Для проектной документации требуется аэродинамический расчет с учетом ветрового напора и дисбаланса давлений согласно МР ВНИИПО.
+                                </p>
+                            </div>
                         </div>
                     )}
 

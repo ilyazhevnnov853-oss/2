@@ -6,7 +6,55 @@ const CONSTANTS = {
   DEFAULT_ROOM_HEIGHT: 3.5,
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
+  MAX_PARTICLES: 3500,
+  SPAWN_RATE_BASE: 5,
+  SPAWN_RATE_MULTIPLIER: 8
 };
+
+// --- HELPER FUNCTIONS (Moved outside for micro-optimization) ---
+const getGlowColor = (t: number) => {
+    if (t <= 18) return `64, 224, 255`; 
+    if (t >= 28) return `255, 99, 132`; 
+    if (t > 18 && t < 28) return `100, 255, 160`; 
+    return `255, 255, 255`;
+};
+
+const getLayout = (w: number, h: number, rw: number, rl: number, rh: number, mode: 'side' | 'top') => {
+    if (mode === 'side') {
+        return { ppm: h / rh, originX: 0, originY: 0 };
+    } else {
+        const padding = 60; 
+        const availW = w - padding * 2;
+        const availH = h - padding * 2;
+        const ppm = Math.min(availW / rw, availH / rl);
+        const roomPixW = rw * ppm;
+        const roomPixH = rl * ppm;
+        const originX = (w - roomPixW) / 2;
+        const originY = (h - roomPixH) / 2;
+        return { ppm, originX, originY };
+    }
+};
+
+// --- PARTICLE POOLING SYSTEM ---
+interface Particle {
+    active: boolean;
+    x: number; 
+    y: number; 
+    vx: number; 
+    vy: number; 
+    buoyancy: number; 
+    drag: number; 
+    age: number; 
+    life: number; 
+    lastHistoryTime: number; 
+    history: {x: number, y: number, age: number}[]; 
+    color: string; 
+    waveFreq: number; 
+    wavePhase: number; 
+    waveAmp: number; 
+    isHorizontal: boolean; 
+    isSuction: boolean;
+}
 
 interface DiffuserCanvasProps {
   width: number; 
@@ -22,8 +70,6 @@ interface DiffuserCanvasProps {
   roomHeight: number; 
   diffuserHeight: number; 
   workZoneHeight: number;
-  
-  // Top View Props
   roomWidth?: number;
   roomLength?: number;
   viewMode?: 'side' | 'top';
@@ -32,11 +78,8 @@ interface DiffuserCanvasProps {
   onSelectDiffuser?: (id: string) => void;
   onRemoveDiffuser?: (id: string) => void;
   onDuplicateDiffuser?: (id: string) => void;
-  
-  // Performance & Drag Handlers
   onDragStart?: () => void;
   onDragEnd?: () => void;
-
   selectedDiffuserId?: string | null;
   showHeatmap?: boolean;
   velocityField?: number[][];
@@ -46,99 +89,269 @@ interface DiffuserCanvasProps {
   gridStep?: number;
 }
 
-const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({ 
-    width, height, physics, isPowerOn, isPlaying, temp, roomTemp, 
-    flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight,
-    roomWidth = 6, roomLength = 6, viewMode = 'side', placedDiffusers = [], 
-    onUpdateDiffuserPos, onSelectDiffuser, onRemoveDiffuser, onDuplicateDiffuser, selectedDiffuserId, 
-    onDragStart, onDragEnd,
-    dragPreview, snapToGrid, gridSnapSize,
-    showHeatmap, velocityField, gridStep
-}) => {
+const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const requestRef = useRef<number>(0);
-    const particlesRef = useRef<any[]>([]); 
     
-    // State for dragging in Top View
+    // --- OFFSCREEN CANVAS FOR STATIC TOP VIEW ---
+    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const isOffscreenDirty = useRef<boolean>(true);
+
+    // --- STRICT REF PATTERN ---
+    // Holds the latest props to avoid re-creating the animate loop
+    const simulationRef = useRef(props);
+
+    // --- PARTICLE POOL ---
+    const particlePool = useRef<Particle[]>([]);
+
+    // Init Pool Once
+    useEffect(() => {
+        if (particlePool.current.length === 0) {
+            for (let i = 0; i < CONSTANTS.MAX_PARTICLES; i++) {
+                particlePool.current.push({
+                    active: false,
+                    x: 0, y: 0, vx: 0, vy: 0,
+                    buoyancy: 0, drag: 0, age: 0, life: 0,
+                    lastHistoryTime: 0,
+                    history: [], 
+                    color: '255,255,255',
+                    waveFreq: 0, wavePhase: 0, waveAmp: 0,
+                    isHorizontal: false, isSuction: false
+                });
+            }
+        }
+    }, []);
+
+    // Sync Props to Ref
+    useEffect(() => {
+        const prevProps = simulationRef.current;
+        simulationRef.current = props;
+
+        // Check if we need to redraw the static background
+        if (
+            props.viewMode === 'top' && (
+                prevProps.width !== props.width ||
+                prevProps.height !== props.height ||
+                prevProps.roomWidth !== props.roomWidth ||
+                prevProps.roomLength !== props.roomLength ||
+                prevProps.showHeatmap !== props.showHeatmap ||
+                prevProps.showGrid !== props.showGrid ||
+                prevProps.velocityField !== props.velocityField 
+            )
+        ) {
+            isOffscreenDirty.current = true;
+        }
+    }, [props]);
+
+    // Local state for interactions
     const [isDragging, setIsDragging] = useState(false);
     const [isStickyDrag, setIsStickyDrag] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-    
-    // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
 
-    const getGlowColor = (t: number) => {
-        // Цвет зависит от абсолютной температуры
-        if (t <= 18) return `64, 224, 255`; // Cyan for cold
-        if (t >= 28) return `255, 99, 132`; // Red for hot
-        if (t > 18 && t < 28) return `100, 255, 160`; // Green for comfort
-        return `255, 255, 255`;
+    // --- REUSE PARTICLE LOGIC ---
+    const spawnParticle = (p: Particle, state: DiffuserCanvasProps, ppm: number) => {
+        const { physics, temp, flowType, modelId, width, height, roomHeight, diffuserHeight } = state;
+        
+        if (physics.error) return;
+        const spec = physics.spec;
+        if (!spec || !spec.A) return;
+
+        const nozzleW = (spec.A / 1000) * ppm;
+        const scale = ppm / 1000;
+        
+        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
+        const hD = (spec.D || 0) * scale;
+        const startY = diffuserYPos + hD;
+
+        const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
+
+        let startX = width / 2;
+        let vx = 0, vy = 0;
+        let drag = 0.96;
+        let waveAmp = 5;
+        let waveFreq = 4 + Math.random() * 4;
+        let isHorizontal = false;
+        let isSuction = false;
+
+        // Physics gain
+        const physicsAr = physics.Ar || 0; 
+        const visualGain = 50.0; 
+        const buoyancy = -physicsAr * (physics.v0 * physics.v0) * ppm * visualGain;
+
+        if (flowType === 'suction') {
+            isSuction = true;
+            startX = Math.random() * width;
+            const spawnY = Math.random() * height;
+            const targetX = width / 2;
+            const targetY = diffuserYPos;
+            const dx = targetX - startX;
+            const dy = targetY - spawnY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const force = ((physics.v0 || 0) * 500) / (dist + 10);
+            vx = (dx / dist) * force;
+            vy = (dy / dist) * force;
+            drag = 1.0; waveAmp = 0;
+            // Setup particle for suction
+            p.x = startX; p.y = spawnY; p.vx = vx; p.vy = vy; p.buoyancy = 0; 
+            p.drag = drag; p.age = 0; p.life = 3.0; p.color = '150, 150, 150';
+            p.waveFreq = waveFreq; p.wavePhase = 0; p.waveAmp = waveAmp;
+            p.isHorizontal = isHorizontal; p.isSuction = isSuction;
+        } else {
+            // Supply Logic
+            if (flowType.includes('horizontal')) {
+                isHorizontal = true;
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.55);
+                const spread = (Math.random() - 0.5) * 0.1; 
+                const angle = side === 1 ? spread : Math.PI + spread;
+                vx = Math.cos(angle) * pxSpeed * 1.2; 
+                vy = Math.sin(angle) * pxSpeed * 0.2; 
+                if (flowType.includes('swirl')) { waveAmp = 15; waveFreq = 8; } else { waveAmp = 3; }
+            } else if (flowType === '4-way') {
+                isHorizontal = true;
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.55);
+                vx = side * pxSpeed * 1.0;
+                vy = pxSpeed * 0.1;
+            } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.45);
+                const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
+                vx = side * Math.sin(coneAngle) * pxSpeed;
+                vy = Math.cos(coneAngle) * pxSpeed;
+                waveAmp = 5; drag = 0.95;
+            } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
+                vx = Math.sin(spreadAngle) * pxSpeed * 0.8;
+                vy = Math.cos(spreadAngle) * pxSpeed;
+                waveAmp = 8; drag = 0.96;
+            } else if (flowType === 'vertical-swirl') {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.9;
+                const spread = (Math.random() - 0.5) * 1.5; 
+                vx = Math.sin(spread) * pxSpeed * 0.5;
+                vy = Math.cos(spread) * pxSpeed;
+                waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
+            } else if (flowType === 'vertical-compact') {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                const spread = (Math.random() - 0.5) * 0.05; 
+                vx = Math.sin(spread) * pxSpeed * 0.3;
+                vy = Math.cos(spread) * pxSpeed * 1.3; 
+                waveAmp = 1; drag = 0.985;
+            }
+
+            p.x = startX; p.y = startY; p.vx = vx; p.vy = vy; 
+            p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
+            p.life = 2.0 + Math.random() * 1.5;
+            p.color = getGlowColor(temp);
+            p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
+            p.isHorizontal = isHorizontal; p.isSuction = isSuction;
+        }
+
+        p.active = true;
+        p.lastHistoryTime = 0;
+        p.history.length = 0; 
     };
 
-    // --- Helper for Scaling ---
-    const getLayout = useCallback(() => {
-        if (viewMode === 'side') {
-            return {
-                ppm: height / roomHeight,
-                originX: 0,
-                originY: 0
-            };
+    const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number, state: DiffuserCanvasProps) => {
+        const spec = state.physics.spec;
+        if (!spec || !spec.A) return;
+
+        const scale = ppm / 1000;
+        const wA = spec.A * scale;
+        const hD = (spec.D || 0) * scale;
+        const hC = (spec.C || 0) * scale; 
+        const hTotal = hD + hC;
+        const yPos = (state.roomHeight - state.diffuserHeight) * ppm;
+        
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
+        
+        ctx.save();
+        ctx.translate(0, yPos);
+        ctx.fillStyle = '#475569';
+        ctx.beginPath();
+        ctx.rect(cx - wA/2, 0, wA, hD); ctx.fill();
+        
+        ctx.fillStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.moveTo(cx - wA/2, hD);
+        
+        if (state.modelId === 'dpu-s') {
+             ctx.lineTo(cx - wA/2 + 10, hTotal + 20);
+             ctx.lineTo(cx + wA/2 - 10, hTotal + 20); ctx.lineTo(cx + wA/2, hD);
+        } else if (state.modelId === 'amn-adn') {
+             ctx.rect(cx - wA/2, hD, wA, 5*scale);
         } else {
-            const padding = 60; // Padding around the room in canvas pixels
-            const availW = width - padding * 2;
-            const availH = height - padding * 2;
-            const ppm = Math.min(availW / roomWidth, availH / roomLength);
-            const roomPixW = roomWidth * ppm;
-            const roomPixH = roomLength * ppm;
-            const originX = (width - roomPixW) / 2;
-            const originY = (height - roomPixH) / 2;
-            return { ppm, originX, originY };
+             ctx.quadraticCurveTo(cx - wA/2, hTotal, cx, hTotal + 5);
+             ctx.quadraticCurveTo(cx + wA/2, hTotal, cx + wA/2, hD);
         }
-    }, [width, height, roomWidth, roomLength, roomHeight, viewMode]);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+    };
 
-    useEffect(() => {
-        particlesRef.current = [];
-    }, [modelId, flowType, physics.spec?.A, diffuserHeight, viewMode, width, height, roomWidth, roomLength]);
+    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: DiffuserCanvasProps) => {
+        if (!state.showGrid) return;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        const step = 0.5 * ppm;
+        
+        ctx.beginPath();
+        for (let x = w/2; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let x = w/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let y = 0; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        ctx.stroke();
+        
+        if (state.workZoneHeight > 0) {
+            const wzY = (state.roomHeight - state.workZoneHeight) * ppm;
+            ctx.beginPath();
+            ctx.setLineDash([10, 5]);
+            ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.moveTo(0, wzY);
+            ctx.lineTo(w, wzY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
+            ctx.font = '10px Inter';
+            ctx.fillText(`РАБОЧАЯ ЗОНА (${state.workZoneHeight}м)`, 10, wzY - 5);
+        }
+    };
 
-    // --- OPTIMIZATION: Render Static Background to Offscreen Canvas (TOP VIEW ONLY) ---
-    useEffect(() => {
-        if (viewMode !== 'top') return;
-
+    const updateOffscreenCanvas = (state: DiffuserCanvasProps) => {
         if (!offscreenCanvasRef.current) {
             offscreenCanvasRef.current = document.createElement('canvas');
         }
-        const canvas = offscreenCanvasRef.current;
-        if (canvas.width !== width || canvas.height !== height) {
-            canvas.width = width;
-            canvas.height = height;
+        const cvs = offscreenCanvasRef.current;
+        if (cvs.width !== state.width || cvs.height !== state.height) {
+            cvs.width = state.width;
+            cvs.height = state.height;
         }
-        
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = cvs.getContext('2d', { alpha: false });
         if (!ctx) return;
 
         // Clear
         ctx.fillStyle = '#050505';
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, state.width, state.height);
 
-        const { ppm, originX, originY } = getLayout();
+        const { ppm, originX, originY } = getLayout(state.width, state.height, state.roomWidth || 6, state.roomLength || 6, state.roomHeight, 'top');
 
-        // Room Floor
-        const roomPixW = roomWidth * ppm;
-        const roomPixL = roomLength * ppm;
+        const roomPixW = (state.roomWidth || 6) * ppm;
+        const roomPixL = (state.roomLength || 6) * ppm;
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(originX, originY, roomPixW, roomPixL);
 
         // Heatmap
-        if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
-            const stepPx = gridStep * ppm;
+        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0 && state.gridStep) {
+            const stepPx = state.gridStep * ppm;
             const comfortPath = new Path2D();
             const warningPath = new Path2D();
             const draftPath = new Path2D();
 
-            for (let r = 0; r < velocityField.length; r++) {
-                for (let c = 0; c < velocityField[r].length; c++) {
-                    const v = velocityField[r][c];
+            for (let r = 0; r < state.velocityField.length; r++) {
+                for (let c = 0; c < state.velocityField[r].length; c++) {
+                    const v = state.velocityField[r][c];
                     if (v < 0.1) continue;
                     
                     const x = originX + c * stepPx;
@@ -159,25 +372,27 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             ctx.fill(draftPath);
         }
 
-        // Room Border
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 2;
         ctx.strokeRect(originX, originY, roomPixW, roomPixL);
 
-        // Grid
-        if (showGrid) {
-            if (!gridStep || gridStep < 0.2) {
+        if (state.showGrid) {
+            const rw = state.roomWidth || 6;
+            const rl = state.roomLength || 6;
+            const gStep = state.gridStep || 0.1;
+
+            if (gStep < 0.2) {
                 ctx.beginPath();
                 ctx.lineWidth = 0.5;
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-                for (let x = 0; x <= roomWidth; x += 0.1) {
+                for (let x = 0; x <= rw; x += 0.1) {
                     if (Math.abs(x % 1) > 0.01) { 
                         const px = x * ppm;
                         ctx.moveTo(originX + px, originY);
                         ctx.lineTo(originX + px, originY + roomPixL);
                     }
                 }
-                for (let y = 0; y <= roomLength; y += 0.1) {
+                for (let y = 0; y <= rl; y += 0.1) {
                     if (Math.abs(y % 1) > 0.01) {
                         const py = y * ppm;
                         ctx.moveTo(originX, originY + py);
@@ -190,260 +405,87 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             ctx.beginPath();
             ctx.lineWidth = 1;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; 
-            for (let x = 0; x <= roomWidth; x += 1) {
+            for (let x = 0; x <= rw; x += 1) {
                 const px = x * ppm;
                 ctx.moveTo(originX + px, originY);
                 ctx.lineTo(originX + px, originY + roomPixL);
             }
-            for (let y = 0; y <= roomLength; y += 1) {
+            for (let y = 0; y <= rl; y += 1) {
                 const py = y * ppm;
                 ctx.moveTo(originX, originY + py);
                 ctx.lineTo(originX + roomPixW, originY + py);
             }
             ctx.stroke();
         }
-
-    }, [width, height, roomWidth, roomLength, viewMode, showHeatmap, showGrid, velocityField, gridStep, getLayout, workZoneHeight, roomHeight]);
-
-
-    // --- SIDE VIEW PARTICLE LOGIC ---
-    const createParticle = (ppm: number) => {
-        if (physics.error) return null;
-        const spec = physics.spec;
-        if (!spec || !spec.A) return null; 
-
-        const nozzleW = (spec.A / 1000) * ppm;
-        const scale = ppm / 1000;
         
-        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
-        const hD = (spec.D || 0) * scale;
-        const startY = diffuserYPos + hD;
-
-        const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
-        const dtTemp = temp - roomTemp;
-
-        let startX = width / 2;
-        let vx = 0, vy = 0;
-        let drag = 0.96;
-        let waveAmp = 5;
-        let waveFreq = 4 + Math.random() * 4;
-        let isHorizontal = false;
-        let isSuction = false;
-
-        // --- НОВАЯ ФИЗИКА (Archimedes Number) ---
-        // Сила плавучести нормируется через Ar и v0. 
-        // Fy ~ Ar * v0^2 / l0
-        // Упрощаем для визуализации: чем больше Ar, тем сильнее отклонение от прямой
-        const physicsAr = physics.Ar || 0; 
-        const visualGain = 50.0; // Коэффициент усиления для визуальной заметности
-        // Ar > 0 (нагрев) -> buoyancy < 0 (вверх, так как Y вниз)
-        // Ar < 0 (охлаждение) -> buoyancy > 0 (вниз)
-        const buoyancy = -physicsAr * (physics.v0 * physics.v0) * ppm * visualGain;
-
-        if (flowType === 'suction') {
-            isSuction = true;
-            startX = Math.random() * width;
-            const spawnY = Math.random() * height;
-            const targetX = width / 2;
-            const targetY = diffuserYPos;
-            const dx = targetX - startX;
-            const dy = targetY - spawnY;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            const force = ((physics.v0 || 0) * 500) / (dist + 10);
-            vx = (dx / dist) * force;
-            vy = (dy / dist) * force;
-            drag = 1.0; waveAmp = 0;
-            return { x: startX, y: spawnY, vx, vy, buoyancy: 0, drag, age: 0, life: 3.0, history: [], color: '150, 150, 150', waveFreq, wavePhase: 0, waveAmp, isHorizontal, isSuction };
-        }
-
-        if (flowType.includes('horizontal')) {
-            isHorizontal = true;
-            const side = Math.random() > 0.5 ? 1 : -1;
-            startX = width/2 + side * (nozzleW * 0.55);
-            const spread = (Math.random() - 0.5) * 0.1; 
-            const angle = side === 1 ? spread : Math.PI + spread;
-            vx = Math.cos(angle) * pxSpeed * 1.2; 
-            vy = Math.sin(angle) * pxSpeed * 0.2; 
-            if (flowType.includes('swirl')) { waveAmp = 15; waveFreq = 8; } else { waveAmp = 3; }
-        } else if (flowType === '4-way') {
-            isHorizontal = true;
-            const side = Math.random() > 0.5 ? 1 : -1;
-            startX = width/2 + side * (nozzleW * 0.55);
-            vx = side * pxSpeed * 1.0;
-            vy = pxSpeed * 0.1;
-        } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
-            const side = Math.random() > 0.5 ? 1 : -1;
-            startX = width/2 + side * (nozzleW * 0.45);
-            const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
-            vx = side * Math.sin(coneAngle) * pxSpeed;
-            vy = Math.cos(coneAngle) * pxSpeed;
-            waveAmp = 5; drag = 0.95;
-        } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
-            startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
-            const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
-            vx = Math.sin(spreadAngle) * pxSpeed * 0.8;
-            vy = Math.cos(spreadAngle) * pxSpeed;
-            waveAmp = 8; drag = 0.96;
-        } else if (flowType === 'vertical-swirl') {
-            startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.9;
-            const spread = (Math.random() - 0.5) * 1.5; 
-            vx = Math.sin(spread) * pxSpeed * 0.5;
-            vy = Math.cos(spread) * pxSpeed;
-            waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
-        } else if (flowType === 'vertical-compact') {
-            startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
-            const spread = (Math.random() - 0.5) * 0.05; 
-            vx = Math.sin(spread) * pxSpeed * 0.3;
-            vy = Math.cos(spread) * pxSpeed * 1.3; 
-            waveAmp = 1; drag = 0.985;
-        }
-
-        return {
-            x: startX, y: startY, vx, vy, buoyancy, drag, 
-            age: 0, life: 2.0 + Math.random() * 1.5,
-            lastHistoryTime: 0, 
-            history: [], 
-            color: getGlowColor(temp),
-            waveFreq, wavePhase: Math.random() * Math.PI * 2, waveAmp, isHorizontal, isSuction
-        };
+        isOffscreenDirty.current = false;
     };
 
-    const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number) => {
-        const spec = physics.spec;
-        if (!spec || !spec.A) return;
-
-        const scale = ppm / 1000;
-        const wA = spec.A * scale;
-        const hD = (spec.D || 0) * scale;
-        const hC = (spec.C || 0) * scale; 
-        const hTotal = hD + hC;
-        
-        const yPos = (roomHeight - diffuserHeight) * ppm;
-        
-        // Труба
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
-        
-        // Body
-        ctx.save();
-        ctx.translate(0, yPos);
-        ctx.fillStyle = '#475569';
-        ctx.beginPath();
-        ctx.rect(cx - wA/2, 0, wA, hD); ctx.fill();
-        
-        // Face
-        ctx.fillStyle = '#94a3b8';
-        ctx.beginPath();
-        ctx.moveTo(cx - wA/2, hD);
-        
-        if (modelId === 'dpu-s') {
-             ctx.lineTo(cx - wA/2 + 10, hTotal + 20);
-             ctx.lineTo(cx + wA/2 - 10, hTotal + 20); ctx.lineTo(cx + wA/2, hD);
-        } else if (modelId === 'amn-adn') {
-             ctx.rect(cx - wA/2, hD, wA, 5*scale);
-        } else {
-             ctx.quadraticCurveTo(cx - wA/2, hTotal, cx, hTotal + 5);
-             ctx.quadraticCurveTo(cx + wA/2, hTotal, cx + wA/2, hD);
-        }
-        ctx.closePath(); ctx.fill();
-        ctx.restore();
-    };
-
-    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number) => {
-        if (!showGrid) return;
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        const step = 0.5 * ppm;
-        
-        ctx.beginPath();
-        for (let x = w/2; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-        for (let x = w/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-        for (let y = 0; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
-        ctx.stroke();
-        
-        if (workZoneHeight > 0) {
-            const wzY = (roomHeight - workZoneHeight) * ppm;
-            ctx.beginPath();
-            ctx.setLineDash([10, 5]);
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.moveTo(0, wzY);
-            ctx.lineTo(w, wzY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
-            ctx.font = '10px Inter';
-            ctx.fillText(`РАБОЧАЯ ЗОНА (${workZoneHeight}м)`, 10, wzY - 5);
-        }
-    };
-
+    // --- MAIN ANIMATION LOOP (DEPENDENCY FREE) ---
     const animate = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
+
+        // READ LATEST STATE FROM REF
+        const state = simulationRef.current;
+        const { width, height, isPowerOn, isPlaying, viewMode } = state;
         
         const dt = CONSTANTS.BASE_TIME_STEP;
-        const layout = getLayout();
+        const layout = getLayout(width, height, state.roomWidth || 6, state.roomLength || 6, state.roomHeight, viewMode || 'side');
 
         if (viewMode === 'side') {
-            // --- SIDE VIEW RENDER ---
-            
-            ctx.globalCompositeOperation = 'source-over';
-
-            // PERFORMANCE OPTIMIZATION:
-            // If idle (power off and no particles left), assume static scene.
-            // Draw one last time and STOP THE LOOP to save CPU/GPU.
-            if (!isPowerOn && particlesRef.current.length === 0) {
-                ctx.fillStyle = '#050505';
-                ctx.fillRect(0, 0, width, height);
-                drawSideViewGrid(ctx, width, height, layout.ppm);
-                drawDiffuserSideProfile(ctx, width/2, layout.ppm);
-                return; // Stop requesting animation frame
-            }
-
-            // Normal Animation Loop
-            // Fade out background for trails
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
+            // SIDE VIEW LOGIC
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; // Trail effect
             ctx.fillRect(0, 0, width, height);
             
-            // Draw Grid every frame (cheap in side view)
-            drawSideViewGrid(ctx, width, height, layout.ppm);
+            drawSideViewGrid(ctx, width, height, layout.ppm, state);
 
-            // Simulation
-            if (isPowerOn && isPlaying && !physics.error) {
-                const maxParticles = 3500; 
-                const spawnRate = Math.ceil(5 + (physics.v0 || 0) / 2 * 8);
+            const pool = particlePool.current;
+            
+            // 1. UPDATE AND SPAWN
+            if (isPowerOn && isPlaying && !state.physics.error) {
+                // Spawn new
+                const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+                let spawnedCount = 0;
                 
-                if (particlesRef.current.length < maxParticles) {
-                    for(let i=0; i<spawnRate; i++) {
-                        const p = createParticle(layout.ppm);
-                        if(p) particlesRef.current.push(p);
+                // Linear scan is fast enough for 3500 items in JS engine optimization
+                for (let i = 0; i < pool.length; i++) {
+                    if (!pool[i].active) {
+                        spawnParticle(pool[i], state, layout.ppm);
+                        spawnedCount++;
+                        if (spawnedCount >= spawnRate) break;
                     }
                 }
             }
 
-            // Draw Particles
-            ctx.globalCompositeOperation = 'screen';
-            ctx.lineWidth = 1; 
-            ctx.lineCap = 'round';
+            // 2. UPDATE PHYSICS
+            const maxH = height;
+            
+            for (let i = 0; i < pool.length; i++) {
+                const p = pool[i];
+                if (!p.active) continue;
 
-            for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-                let p = particlesRef.current[i];
                 if (isPowerOn && isPlaying) {
                     p.age += dt;
+                    if (p.age > p.life || p.y > maxH || p.x < 0 || p.x > width || p.y < -100) {
+                        p.active = false;
+                        continue;
+                    }
+
                     if (p.isSuction) {
                         const targetX = width / 2;
-                        const targetY = (roomHeight - diffuserHeight) * layout.ppm;
+                        const targetY = (state.roomHeight - state.diffuserHeight) * layout.ppm;
                         const dx = targetX - p.x;
                         const dy = targetY - p.y;
                         const distSq = dx*dx + dy*dy;
                         const dist = Math.sqrt(distSq);
                         if (dist < 20) { 
-                            particlesRef.current.splice(i, 1);
+                            p.active = false;
                             continue;
                         }
-                        const force = ((physics.v0 || 0) * 2000) / (distSq + 100);
+                        const force = ((state.physics.v0 || 0) * 2000) / (distSq + 100);
                         p.vx += (dx / dist) * force * dt;
                         p.vy += (dy / dist) * force * dt;
                         p.x += p.vx; 
@@ -461,17 +503,22 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     }
 
                     if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
+                        // Limit history length to prevent unbounded growth in reused object
+                        if (p.history.length > 20) p.history.shift();
                         p.history.push({ x: p.x, y: p.y, age: p.age });
                         p.lastHistoryTime = p.age;
                     }
-                    if (p.history.length > 20) p.history.shift();
                 }
+            }
 
-                if (p.age > p.life || p.y > height || p.x < 0 || p.x > width || p.y < -100) {
-                    particlesRef.current.splice(i, 1);
-                    continue;
-                }
+            // 3. DRAW PARTICLES
+            ctx.globalCompositeOperation = 'screen';
+            ctx.lineWidth = 1; 
+            ctx.lineCap = 'round';
 
+            for (let i = 0; i < pool.length; i++) {
+                const p = pool[i];
+                if (!p.active) continue;
                 if (p.history.length > 2) {
                     let alpha = (1 - p.age/p.life) * 0.5;
                     ctx.strokeStyle = `rgba(${p.color}, ${alpha})`; 
@@ -480,6 +527,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     const wx = (p.isHorizontal && !p.isSuction) ? 0 : waveVal;
                     const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
                     ctx.moveTo(p.x + wx, p.y + wy);
+                    
+                    // Iterate backwards for trail
                     for (let j = p.history.length - 1; j >= 0; j--) {
                         const h = p.history[j];
                         const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
@@ -492,29 +541,33 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             }
 
             ctx.globalCompositeOperation = 'source-over';
-            drawDiffuserSideProfile(ctx, width/2, layout.ppm);
+            drawDiffuserSideProfile(ctx, width/2, layout.ppm, state);
 
         } else {
-            // --- TOP VIEW RENDER ---
+            // TOP VIEW LOGIC
             
-            // Use cached background from offscreen canvas
+            // Check dirty flag
+            if (isOffscreenDirty.current) {
+                updateOffscreenCanvas(state);
+            }
+
+            // Draw Background
             if (offscreenCanvasRef.current) {
                 ctx.drawImage(offscreenCanvasRef.current, 0, 0);
             } else {
-                // Fallback clear
                 ctx.fillStyle = '#050505';
                 ctx.fillRect(0, 0, width, height);
             }
 
             const { ppm, originX, originY } = layout;
 
-            // Draw Placed Diffusers
-            placedDiffusers.forEach(d => {
+            // Dynamic Diffusers
+            state.placedDiffusers?.forEach(d => {
                 const cx = originX + d.x * ppm;
                 const cy = originY + d.y * ppm;
                 
                 // Draw Coverage Area (Physics-based)
-                if (!showHeatmap) {
+                if (!state.showHeatmap) {
                     const rPx = d.performance.coverageRadius * ppm;
                     const v = d.performance.workzoneVelocity;
                     
@@ -544,12 +597,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 ctx.rect(cx - dSize/2, cy - dSize/2, dSize, dSize);
                 
                 // Highlight Selection
-                if (selectedDiffuserId === d.id) {
-                    ctx.fillStyle = '#3b82f6'; // Blue
+                if (state.selectedDiffuserId === d.id) {
+                    ctx.fillStyle = '#3b82f6'; 
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 2;
                 } else {
-                    ctx.fillStyle = '#475569'; // Slate
+                    ctx.fillStyle = '#475569'; 
                     ctx.strokeStyle = '#94a3b8';
                     ctx.lineWidth = 1;
                 }
@@ -559,11 +612,11 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             });
 
             // Draw Drag Preview
-            if (dragPreview) {
-                const cx = originX + dragPreview.x * ppm;
-                const cy = originY + dragPreview.y * ppm;
-                const wPx = dragPreview.width * ppm; // width in meters * ppm
-                const hPx = dragPreview.height * ppm;
+            if (state.dragPreview) {
+                const cx = originX + state.dragPreview.x * ppm;
+                const cy = originY + state.dragPreview.y * ppm;
+                const wPx = state.dragPreview.width * ppm; 
+                const hPx = state.dragPreview.height * ppm;
                 
                 ctx.beginPath();
                 ctx.rect(cx - wPx/2, cy - hPx/2, wPx, hPx);
@@ -576,7 +629,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
 
         requestRef.current = requestAnimationFrame(animate);
-    }, [width, height, isPowerOn, isPlaying, physics, temp, roomTemp, flowType, modelId, showGrid, roomHeight, diffuserHeight, workZoneHeight, viewMode, roomWidth, roomLength, placedDiffusers, selectedDiffuserId, dragPreview, showHeatmap, velocityField, gridStep, getLayout]);
+    }, []); // Empty dependency array ensures animate is never recreated!
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);
@@ -585,12 +638,11 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         };
     }, [animate]);
 
-
-    // --- MOUSE HANDLERS (TOP VIEW) ---
+    // --- INTERACTION HANDLERS (using refs mostly) ---
+    
     const getMousePos = (e: React.MouseEvent | React.TouchEvent) => {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return { x: 0, y: 0 };
-        
         let clientX, clientY;
         if ('touches' in e) {
              clientX = e.touches[0].clientX;
@@ -599,25 +651,24 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
              clientX = (e as React.MouseEvent).clientX;
              clientY = (e as React.MouseEvent).clientY;
         }
-
-        const scaleX = width / rect.width;
-        const scaleY = height / rect.height;
+        const scaleX = props.width / rect.width;
+        const scaleY = props.height / rect.height;
         return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
     };
 
     const handleContextMenu = (e: React.MouseEvent) => {
-        if (viewMode !== 'top') return;
+        if (props.viewMode !== 'top') return;
         e.preventDefault();
         const { x: mouseX, y: mouseY } = getMousePos(e);
-        const { ppm, originX, originY } = getLayout();
+        const { ppm, originX, originY } = getLayout(props.width, props.height, props.roomWidth || 6, props.roomLength || 6, props.roomHeight, 'top');
 
-        // Hit detection reversed to select top-most
         let hitId = null;
-        for (let i = placedDiffusers.length - 1; i >= 0; i--) {
-            const d = placedDiffusers[i];
+        const diffusers = props.placedDiffusers || [];
+        for (let i = diffusers.length - 1; i >= 0; i--) {
+            const d = diffusers[i];
             const cx = originX + d.x * ppm;
             const cy = originY + d.y * ppm;
-            const hitSize = Math.max((d.performance.spec.A / 1000 * ppm), 40); // Minimum hit area
+            const hitSize = Math.max((d.performance.spec.A / 1000 * ppm), 40); 
             
             if (mouseX >= cx - hitSize/2 && mouseX <= cx + hitSize/2 && 
                 mouseY >= cy - hitSize/2 && mouseY <= cy + hitSize/2) {
@@ -628,37 +679,34 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
 
         if (hitId) {
             setContextMenu({ x: e.clientX, y: e.clientY, id: hitId });
-            onSelectDiffuser && onSelectDiffuser(hitId);
+            props.onSelectDiffuser && props.onSelectDiffuser(hitId);
         } else {
             setContextMenu(null);
         }
     };
 
     const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
-        if (viewMode !== 'top') return;
-        
-        // Handle sticky drag termination for mouse
+        if (props.viewMode !== 'top') return;
         if ('button' in e && e.button !== 0) return;
         
-        // If sticky drag active, simple click places it.
         if (isStickyDrag) {
             setIsDragging(false);
             setIsStickyDrag(false);
-            onDragEnd && onDragEnd();
+            props.onDragEnd && props.onDragEnd();
             setContextMenu(null);
             return;
         }
 
         const { x: mouseX, y: mouseY } = getMousePos(e);
-        const { ppm, originX, originY } = getLayout();
+        const { ppm, originX, originY } = getLayout(props.width, props.height, props.roomWidth || 6, props.roomLength || 6, props.roomHeight, 'top');
 
-        // Hit detection reversed to select top-most
         let hitId = null;
-        for (let i = placedDiffusers.length - 1; i >= 0; i--) {
-            const d = placedDiffusers[i];
+        const diffusers = props.placedDiffusers || [];
+        for (let i = diffusers.length - 1; i >= 0; i--) {
+            const d = diffusers[i];
             const cx = originX + d.x * ppm;
             const cy = originY + d.y * ppm;
-            const hitSize = Math.max((d.performance.spec.A / 1000 * ppm), 40); // Minimum hit area
+            const hitSize = Math.max((d.performance.spec.A / 1000 * ppm), 40); 
             
             if (mouseX >= cx - hitSize/2 && mouseX <= cx + hitSize/2 && 
                 mouseY >= cy - hitSize/2 && mouseY <= cy + hitSize/2) {
@@ -668,69 +716,67 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         }
 
         if (hitId) {
-            onSelectDiffuser && onSelectDiffuser(hitId);
+            props.onSelectDiffuser && props.onSelectDiffuser(hitId);
             setIsDragging(true);
-            onDragStart && onDragStart(); // Notify parent
-            const d = placedDiffusers.find(d => d.id === hitId);
+            props.onDragStart && props.onDragStart();
+            const d = diffusers.find(d => d.id === hitId);
             if(d) {
                 const cx = originX + d.x * ppm;
                 const cy = originY + d.y * ppm;
                 setDragOffset({ x: mouseX - cx, y: mouseY - cy });
             }
         } else {
-            onSelectDiffuser && onSelectDiffuser(''); // Deselect
+            props.onSelectDiffuser && props.onSelectDiffuser(''); 
         }
         setContextMenu(null);
     };
 
     const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDragging || !selectedDiffuserId || viewMode !== 'top') return;
+        if (!isDragging || !props.selectedDiffuserId || props.viewMode !== 'top') return;
         const { x: mouseX, y: mouseY } = getMousePos(e);
-        const { ppm, originX, originY } = getLayout();
+        const { ppm, originX, originY } = getLayout(props.width, props.height, props.roomWidth || 6, props.roomLength || 6, props.roomHeight, 'top');
 
         let newX = (mouseX - dragOffset.x - originX) / ppm;
         let newY = (mouseY - dragOffset.y - originY) / ppm;
 
-        if (snapToGrid && gridSnapSize) {
-            newX = Math.round(newX / gridSnapSize) * gridSnapSize;
-            newY = Math.round(newY / gridSnapSize) * gridSnapSize;
+        if (props.snapToGrid && props.gridSnapSize) {
+            newX = Math.round(newX / props.gridSnapSize) * props.gridSnapSize;
+            newY = Math.round(newY / props.gridSnapSize) * props.gridSnapSize;
         }
 
-        // Clamp to room
-        newX = Math.max(0, Math.min(roomWidth, newX));
-        newY = Math.max(0, Math.min(roomLength, newY));
+        const rw = props.roomWidth || 6;
+        const rl = props.roomLength || 6;
+        newX = Math.max(0, Math.min(rw, newX));
+        newY = Math.max(0, Math.min(rl, newY));
 
-        onUpdateDiffuserPos && onUpdateDiffuserPos(selectedDiffuserId, newX, newY);
+        props.onUpdateDiffuserPos && props.onUpdateDiffuserPos(props.selectedDiffuserId, newX, newY);
     };
 
     const handleEnd = () => {
         if (!isStickyDrag) {
             setIsDragging(false);
-            onDragEnd && onDragEnd();
+            props.onDragEnd && props.onDragEnd();
         }
     };
 
-    // Context Menu Logic
     const handleContextAction = (action: 'move' | 'delete' | 'duplicate') => {
         if (!contextMenu) return;
         
         if (action === 'move') {
-            onSelectDiffuser && onSelectDiffuser(contextMenu.id);
+            props.onSelectDiffuser && props.onSelectDiffuser(contextMenu.id);
             setIsDragging(true);
             setIsStickyDrag(true);
-            onDragStart && onDragStart();
-            setDragOffset({ x: 0, y: 0 }); // Center on cursor for sticky drag
-        } else if (action === 'delete' && onRemoveDiffuser) {
-            onRemoveDiffuser(contextMenu.id);
-        } else if (action === 'duplicate' && onDuplicateDiffuser) {
-            onDuplicateDiffuser(contextMenu.id);
-            // We assume the new item becomes selected.
+            props.onDragStart && props.onDragStart();
+            setDragOffset({ x: 0, y: 0 }); 
+        } else if (action === 'delete' && props.onRemoveDiffuser) {
+            props.onRemoveDiffuser(contextMenu.id);
+        } else if (action === 'duplicate' && props.onDuplicateDiffuser) {
+            props.onDuplicateDiffuser(contextMenu.id);
             setIsDragging(true);
             setIsStickyDrag(true);
-            onDragStart && onDragStart();
-            setDragOffset({ x: 0, y: 0 }); // Center on cursor
+            props.onDragStart && props.onDragStart();
+            setDragOffset({ x: 0, y: 0 }); 
         }
-        
         setContextMenu(null);
     };
 
@@ -738,9 +784,9 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         <div className="relative w-full h-full">
             <canvas 
                 ref={canvasRef} 
-                width={width} 
-                height={height} 
-                className={`block w-full h-full touch-none ${viewMode === 'top' ? 'cursor-crosshair' : ''}`}
+                width={props.width} 
+                height={props.height} 
+                className={`block w-full h-full touch-none ${props.viewMode === 'top' ? 'cursor-crosshair' : ''}`}
                 onContextMenu={handleContextMenu}
                 onMouseDown={handleStart}
                 onMouseMove={handleMove}
@@ -774,7 +820,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     </button>
                 </div>
             )}
-            {physics.error && (
+            {props.physics.error && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
                     <div className="flex flex-col items-center gap-4 p-8 border border-red-500/30 bg-red-500/5 rounded-3xl text-red-200">
                         <span className="font-bold text-xl tracking-tight">ТИПОРАЗМЕР НЕДОСТУПЕН</span>

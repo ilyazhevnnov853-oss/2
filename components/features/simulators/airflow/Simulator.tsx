@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info
 } from 'lucide-react';
@@ -72,6 +72,31 @@ const Simulator = ({ onBack, onHome }: any) => {
     
     useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
     
+    // Stable handlers for DiffuserCanvas
+    const removeDiffuser = useCallback((id: string) => { 
+        setPlacedDiffusers(prev => prev.filter(d => d.id !== id)); 
+        if (selectedDiffuserId === id) setSelectedDiffuserId(null); 
+    }, [selectedDiffuserId]);
+
+    const duplicateDiffuser = useCallback((id: string) => {
+        const original = placedDiffusers.find(d => d.id === id);
+        if (!original) return;
+        const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
+        
+        let newX = Math.min(params.roomWidth - 0.5, Math.max(0, original.x + 0.5));
+        let newY = Math.min(params.roomLength - 0.5, Math.max(0, original.y + 0.5));
+        
+        const newDiffuser: PlacedDiffuser = { 
+            ...original, 
+            id: `d-${Date.now()}`, 
+            index: nextIndex, 
+            x: newX, 
+            y: newY 
+        };
+        setPlacedDiffusers(prev => [...prev, newDiffuser]);
+        setSelectedDiffuserId(newDiffuser.id);
+    }, [placedDiffusers, params.roomWidth, params.roomLength]);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (viewMode !== 'top') return;
@@ -80,7 +105,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [viewMode, selectedDiffuserId, placedDiffusers]);
+    }, [viewMode, selectedDiffuserId, removeDiffuser, duplicateDiffuser]);
 
     // --- LOGIC ---
     const toggleSection = (id: string) => setOpenSection(prev => prev === id ? null : id);
@@ -115,11 +140,11 @@ const Simulator = ({ onBack, onHome }: any) => {
         setPlacedDiffusers(prev => prev.map(d => ({ ...d, performance: calculatePlacedDiffuserPerformance(d) })));
     }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
 
-    const addDiffuserToPlan = (xPos?: number, yPos?: number) => {
+    const addDiffuserToPlan = () => {
         if (!sizeSelected || physics.error) return;
         const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
         const newDiffuser: PlacedDiffuser = {
-            id: `d-${Date.now()}`, index: nextIndex, x: xPos !== undefined ? xPos : params.roomWidth / 2, y: yPos !== undefined ? yPos : params.roomLength / 2,
+            id: `d-${Date.now()}`, index: nextIndex, x: params.roomWidth / 2, y: params.roomLength / 2,
             modelId: params.modelId, diameter: params.diameter, volume: params.volume, performance: physics 
         };
         newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
@@ -127,27 +152,12 @@ const Simulator = ({ onBack, onHome }: any) => {
         setSelectedDiffuserId(newDiffuser.id);
     };
 
-    const duplicateDiffuser = (id: string) => {
-        const original = placedDiffusers.find(d => d.id === id);
-        if (!original) return;
-        const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
-        
-        let newX = Math.min(params.roomWidth - 0.5, Math.max(0, original.x + 0.5));
-        let newY = Math.min(params.roomLength - 0.5, Math.max(0, original.y + 0.5));
-        
-        const newDiffuser: PlacedDiffuser = { 
-            ...original, 
-            id: `d-${Date.now()}`, 
-            index: nextIndex, 
-            x: newX, 
-            y: newY 
-        };
-        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
-        setSelectedDiffuserId(newDiffuser.id);
-    };
+    const updateDiffuserPosition = useCallback((id: string, x: number, y: number) => {
+        setPlacedDiffusers(prev => prev.map(d => d.id === id ? { ...d, x, y } : d));
+    }, []);
 
-    const updateDiffuserPosition = (id: string, x: number, y: number) => setPlacedDiffusers(prev => prev.map(d => d.id === id ? { ...d, x, y } : d));
-    const removeDiffuser = (id: string) => { setPlacedDiffusers(prev => prev.filter(d => d.id !== id)); if (selectedDiffuserId === id) setSelectedDiffuserId(null); };
+    const handleDragStart = useCallback(() => setIsDragging(true), []);
+    const handleDragEnd = useCallback(() => setIsDragging(false), []);
 
     const handleExport = () => {
         const canvas = document.querySelector('canvas');
@@ -171,7 +181,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onHome={onHome} 
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
-                onAddDiffuser={() => addDiffuserToPlan()}
+                onAddDiffuser={addDiffuserToPlan}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
@@ -199,8 +209,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                         onRemoveDiffuser={removeDiffuser} onDuplicateDiffuser={duplicateDiffuser} selectedDiffuserId={selectedDiffuserId}
                         showHeatmap={showHeatmap} velocityField={velocityField} gridStep={isDragging ? 0.5 : 0.1}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
-                        onDragStart={() => setIsDragging(true)}
-                        onDragEnd={() => setIsDragging(false)}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
                     />
                 </div>
                 
