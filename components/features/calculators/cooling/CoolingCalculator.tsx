@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
     Home, ChevronLeft, ChevronRight, Lock, CheckCircle2, 
-    Sun, Users, Wind, BarChart3, Box, Menu, X, Thermometer
+    Sun, Users, Wind, BarChart3, Box, Menu, X, Thermometer, Compass
 } from 'lucide-react';
 import { GlassButton, GlassSlider, SectionHeader } from '../../../ui/Shared';
 import { SOLAR_GAINS, WALL_TRANSMISSION, INTERNAL_LOADS } from '../../../../constants';
@@ -13,10 +13,11 @@ interface CalcData {
     length: number;
     height: number;
     wallType: keyof typeof WALL_TRANSMISSION;
+    azimuth: number; // 0-360 degrees
     
     // Шаг 2: Окна
     glassArea: number;
-    orientation: keyof typeof SOLAR_GAINS;
+    isSkylight: boolean; // Replaces 'orientation' logic for Horizontal
     glassType: 'Glass_Single' | 'Glass_Double';
     
     // Шаг 3: Внутренние
@@ -36,14 +37,26 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     
     const [data, setData] = useState<CalcData>({
-        width: 0, length: 0, height: 3.0, wallType: 'Modern',
-        glassArea: 0, orientation: 'South', glassType: 'Glass_Double',
+        width: 0, length: 0, height: 3.0, wallType: 'Modern', azimuth: 180,
+        glassArea: 0, isSkylight: false, glassType: 'Glass_Double',
         people: 0, computers: 0, lighting: true,
         ventilationOn: false, airFlow: 0
     });
 
     // --- РАСЧЕТЫ (Reactive) ---
     const results = useMemo(() => {
+        // Determine Orientation Key based on Azimuth
+        let orientationKey: keyof typeof SOLAR_GAINS = 'North';
+        if (data.isSkylight) {
+            orientationKey = 'Horizontal';
+        } else {
+            const deg = data.azimuth;
+            if (deg >= 45 && deg < 135) orientationKey = 'East';
+            else if (deg >= 135 && deg < 225) orientationKey = 'South';
+            else if (deg >= 225 && deg < 315) orientationKey = 'West';
+            else orientationKey = 'North';
+        }
+
         // 1. Теплопередача через стены (упрощенно: (Периметр * Высота - Окна) * k * dt)
         const perimeter = (data.width + data.length) * 2;
         const wallArea = Math.max(0, perimeter * data.height - data.glassArea);
@@ -51,7 +64,7 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
         const q_walls = wallArea * WALL_TRANSMISSION[data.wallType] * dt;
 
         // 2. Солнечная радиация + Теплопередача окон
-        const q_sun = data.glassArea * SOLAR_GAINS[data.orientation];
+        const q_sun = data.glassArea * SOLAR_GAINS[orientationKey];
         const q_glass_trans = data.glassArea * WALL_TRANSMISSION[data.glassType] * dt;
         const q_total_windows = q_sun + q_glass_trans;
 
@@ -68,12 +81,20 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
         const totalWatts = q_walls + q_total_windows + q_internal + q_vent;
         const btu = totalWatts * 3.412;
 
-        return { q_walls, q_total_windows, q_internal, q_vent, totalWatts, btu, floorArea };
+        return { q_walls, q_total_windows, q_internal, q_vent, totalWatts, btu, floorArea, orientationKey };
     }, [data]);
+
+    // --- HELPER: CARDINAL DIRECTION LABEL ---
+    const getCardinalLabel = (deg: number) => {
+        if (deg >= 45 && deg < 135) return 'Восток';
+        if (deg >= 135 && deg < 225) return 'Юг';
+        if (deg >= 225 && deg < 315) return 'Запад';
+        return 'Север';
+    };
 
     // --- ЛОГИКА ШАГОВ ---
     const STEPS = [
-        { id: 0, title: 'Помещение', subtitle: 'Геометрия', icon: <Box size={18}/>, isValid: data.width > 0 && data.length > 0 },
+        { id: 0, title: 'Помещение', subtitle: 'Геометрия и Азимут', icon: <Box size={18}/>, isValid: data.width > 0 && data.length > 0 },
         { id: 1, title: 'Окна и Солнце', subtitle: 'Инсоляция', icon: <Sun size={18}/>, isValid: true }, 
         { id: 2, title: 'Нагрузки', subtitle: 'Люди и техника', icon: <Users size={18}/>, isValid: true },
         { id: 3, title: 'Результат', subtitle: 'Итоговый отчет', icon: <BarChart3 size={18}/>, isValid: true }
@@ -217,7 +238,24 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
                                         </div>
                                         <div className="space-y-6">
                                             <GlassSlider label="Высота (м)" icon={<ChevronRight className="rotate-90" size={14}/>} val={data.height} min={2} max={10} step={0.1} onChange={(v:number) => setData({...data, height: v})} unit="м"/>
-                                            <div className="space-y-3">
+                                            
+                                            {/* ORIENTATION SLIDER */}
+                                            <div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Азимут фасада</span>
+                                                    <span className="font-bold text-cyan-400 text-sm uppercase">{getCardinalLabel(data.azimuth)}</span>
+                                                </div>
+                                                <GlassSlider 
+                                                    label="" 
+                                                    icon={<Compass size={14}/>} 
+                                                    val={data.azimuth} 
+                                                    min={0} max={360} step={15} 
+                                                    onChange={(v:number) => setData({...data, azimuth: v})} 
+                                                    unit="°"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-3 pt-2">
                                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Тип стен</label>
                                                 <div className="grid grid-cols-1 gap-2">
                                                     {Object.keys(WALL_TRANSMISSION).slice(0,3).map((type) => (
@@ -244,17 +282,21 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
                                         <GlassSlider label="Площадь окон" icon={<Box size={14}/>} val={data.glassArea} min={0} max={Math.floor(data.width*data.length)} step={0.5} onChange={(v:number) => setData({...data, glassArea: v})} unit="м²"/>
                                         
                                         <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-3">Сторона света (Куда выходят окна)</label>
-                                            <div className="flex gap-2 flex-wrap">
-                                                {Object.keys(SOLAR_GAINS).map((side) => (
-                                                    <button 
-                                                        key={side}
-                                                        onClick={() => setData({...data, orientation: side as any})}
-                                                        className={`flex-1 py-4 px-2 rounded-xl border text-xs font-bold transition-all uppercase ${data.orientation === side ? 'bg-amber-500 border-amber-400 text-black shadow-[0_0_20px_rgba(245,158,11,0.4)] scale-105' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
-                                                    >
-                                                        {side}
-                                                    </button>
-                                                ))}
+                                            <div className="bg-black/20 p-6 rounded-2xl border border-white/5 flex items-center justify-between">
+                                                <div>
+                                                    <div className="text-sm font-bold text-white mb-1">Мансардное окно</div>
+                                                    <div className="text-[10px] text-slate-500 uppercase tracking-widest">Горизонтальное остекление (Крыша)</div>
+                                                </div>
+                                                <button onClick={() => setData({...data, isSkylight: !data.isSkylight})} className={`w-12 h-7 rounded-full transition-colors relative border border-white/10 ${data.isSkylight ? 'bg-amber-600' : 'bg-white/5'}`}>
+                                                    <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform shadow-md ${data.isSkylight ? 'translate-x-5' : ''}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-6 p-4 rounded-2xl bg-white/5 border border-white/5 flex justify-between items-center">
+                                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Расчетная ориентация</span>
+                                                 <span className={`font-bold text-sm ${data.isSkylight ? 'text-amber-400' : 'text-cyan-400'}`}>
+                                                    {data.isSkylight ? 'ГОРИЗОНТАЛЬНО' : getCardinalLabel(data.azimuth).toUpperCase()}
+                                                 </span>
                                             </div>
                                         </div>
                                      </div>
@@ -318,7 +360,7 @@ const CoolingCalculator = ({ onBack, onHome }: any) => {
 
                                     <div className="bg-white/5 rounded-3xl p-6 text-left space-y-4 border border-white/5">
                                         <ResultRow label="Стены и кровля" val={results.q_walls} total={results.totalWatts} />
-                                        <ResultRow label="Солнце и окна" val={results.q_total_windows} total={results.totalWatts} highlight />
+                                        <ResultRow label={`Окна (${data.isSkylight ? 'Горизонт' : getCardinalLabel(data.azimuth)})`} val={results.q_total_windows} total={results.totalWatts} highlight />
                                         <ResultRow label="Люди и техника" val={results.q_internal} total={results.totalWatts} />
                                         <ResultRow label="Вентиляция" val={results.q_vent} total={results.totalWatts} />
                                     </div>

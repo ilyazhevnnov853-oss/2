@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
+import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, ArrowUpFromLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
 import { calculatePerformance } from '../../../../hooks/useSimulation'; // Путь скорректирован
 import { GlassButton, GlassSlider } from '../../../ui/Shared'; // Путь скорректирован
@@ -13,7 +13,7 @@ export const SimulatorLeftPanel = ({
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
-    onAddDiffuser, onDragStart
+    onAddDiffuser
 }: any) => {
 
     const handleModelChange = (id: string) => {
@@ -110,10 +110,8 @@ export const SimulatorLeftPanel = ({
                                     {DIFFUSER_CATALOG.map(d => (
                                         <button 
                                             key={d.id} 
-                                            draggable={true}
-                                            onDragStart={(e) => onDragStart && onDragStart(e, d.id)}
                                             onClick={() => handleModelChange(d.id)} 
-                                            className={`p-3.5 rounded-2xl border text-left transition-all group relative overflow-hidden cursor-grab active:cursor-grabbing ${params.modelId === d.id ? 'bg-blue-600 border-blue-500/50 text-white shadow-[0_8px_20px_rgba(37,99,235,0.3)]' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                                            className={`p-3.5 rounded-2xl border text-left transition-all group relative overflow-hidden ${params.modelId === d.id ? 'bg-blue-600 border-blue-500/50 text-white shadow-[0_8px_20px_rgba(37,99,235,0.3)]' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
                                         >
                                             <div className="text-xs font-bold relative z-10">{d.series}</div>
                                             <div className={`text-[10px] truncate relative z-10 mt-0.5 ${params.modelId === d.id ? 'text-blue-100' : 'opacity-50'}`}>{d.name}</div>
@@ -124,7 +122,7 @@ export const SimulatorLeftPanel = ({
                             </div>
                             <div className="mb-6 p-4 rounded-2xl bg-black/20 border border-white/5">
                                 <div className="flex justify-between items-baseline mb-3">
-                                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Типоразмер</label>
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase">Типоразмер</label>
                                     {!sizeSelected && <span className="text-[9px] text-amber-500 font-bold animate-pulse flex items-center gap-1"><AlertTriangle size={10}/> Выберите размер</span>}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
@@ -159,7 +157,7 @@ export const SimulatorLeftPanel = ({
                             <div className="mt-6 pt-5 border-t border-white/5">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20"><ArrowUpToLine size={16}/></div>
+                                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20"><ArrowUpFromLine size={16}/></div>
                                         <div>
                                             <div className="text-[10px] font-bold uppercase text-slate-500">Тип монтажа</div>
                                             <div className="text-xs font-bold text-white tracking-wide">{params.isCeilingMounted ? 'Потолочный' : 'Свободный'}</div>

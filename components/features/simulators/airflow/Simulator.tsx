@@ -27,7 +27,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     // Simulation Data
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
-    const [dragPreview, setDragPreview] = useState<{x: number, y: number, width: number, height: number} | null>(null);
     const [velocityField, setVelocityField] = useState<number[][]>([]);
     const [coverageAnalysis, setCoverageAnalysis] = useState({ totalCoverage: 0, avgVelocity: 0, comfortZones: 0, warningZones: 0, draftZones: 0, deadZones: 0 });
     
@@ -150,34 +149,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     const updateDiffuserPosition = (id: string, x: number, y: number) => setPlacedDiffusers(prev => prev.map(d => d.id === id ? { ...d, x, y } : d));
     const removeDiffuser = (id: string) => { setPlacedDiffusers(prev => prev.filter(d => d.id !== id)); if (selectedDiffuserId === id) setSelectedDiffuserId(null); };
 
-    // Drag Drop
-    const handleDragStart = (e: React.DragEvent, modelId?: string) => { e.dataTransfer.setData('modelId', modelId || params.modelId); e.dataTransfer.effectAllowed = 'copy'; };
-    const handleGlobalDragEnd = () => setDragPreview(null);
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
-        if (viewMode !== 'top' || !containerRef.current) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const scaleX = viewSize.w / rect.width; const scaleY = viewSize.h / rect.height;
-        const ppm = Math.min((viewSize.w - 120) / params.roomWidth, (viewSize.h - 120) / params.roomLength);
-        const originX = (viewSize.w - params.roomWidth * ppm) / 2;
-        const originY = (viewSize.h - params.roomLength * ppm) / 2;
-        let xMeter = Math.max(0, Math.min(params.roomWidth, ((e.clientX - rect.left) * scaleX - originX) / ppm));
-        let yMeter = Math.max(0, Math.min(params.roomLength, ((e.clientY - rect.top) * scaleY - originY) / ppm));
-        
-        let width = 0.3; let height = 0.3;
-        const spec = SPECS[params.diameter];
-        if (spec) { width = spec.A / 1000; height = (spec.B || spec.A) / 1000; }
-        setDragPreview({ x: xMeter, y: yMeter, width, height });
-    };
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        if (viewMode !== 'top' || !containerRef.current) return;
-        const droppedModelId = e.dataTransfer.getData('modelId');
-        if (droppedModelId && dragPreview) addDiffuserToPlan(dragPreview.x, dragPreview.y);
-        setDragPreview(null);
-    };
-    const handleDragLeave = () => setDragPreview(null);
-
     const handleExport = () => {
         const canvas = document.querySelector('canvas');
         if (canvas) { const link = document.createElement('a'); link.download = `Aeroflow-${Date.now()}.png`; link.href = canvas.toDataURL(); link.click(); }
@@ -201,13 +172,12 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={() => addDiffuserToPlan()}
-                onDragStart={handleDragStart}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
             <div className="flex-1 flex flex-col relative h-full overflow-hidden p-0 lg:p-4 lg:pl-0">
                 {/* CANVAS */}
-                <div ref={containerRef} onDragOver={handleDragOver} onDrop={handleDrop} onDragLeave={handleDragLeave} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border-b lg:border border-white/5 ring-1 ring-white/5 group">
+                <div ref={containerRef} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border-b lg:border border-white/5 ring-1 ring-white/5 group">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
                     <div className="absolute inset-0 bg-gradient-to-b from-blue-900/5 to-transparent pointer-events-none"></div>
                     
@@ -227,7 +197,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                         viewMode={viewMode} placedDiffusers={placedDiffusers} 
                         onUpdateDiffuserPos={updateDiffuserPosition} onSelectDiffuser={setSelectedDiffuserId}
                         onRemoveDiffuser={removeDiffuser} onDuplicateDiffuser={duplicateDiffuser} selectedDiffuserId={selectedDiffuserId}
-                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={isDragging ? 0.5 : 0.1} dragPreview={dragPreview}
+                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={isDragging ? 0.5 : 0.1}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={() => setIsDragging(true)}
                         onDragEnd={() => setIsDragging(false)}
