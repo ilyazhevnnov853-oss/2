@@ -20,10 +20,13 @@ const App = () => {
         // Init logic if needed
     }, []);
 
+    const goBack = () => setAppMode('launcher');
+    const goHome = () => { setAppMode('launcher'); setLauncherSection('main'); };
+
     const LauncherCard = ({ onClick, icon, title, desc, color }: any) => (
         <button 
             onClick={onClick}
-            className={`group relative h-64 md:h-80 rounded-[32px] md:rounded-[40px] liquid-glass p-6 md:p-8 flex flex-col items-center justify-center gap-6 md:gap-8 transition-all duration-500 hover:scale-[1.02] border border-white/5 hover:border-${color}-500/30 overflow-hidden active:scale-95`}
+            className={`group relative h-64 md:h-80 rounded-[32px] md:rounded-[40px] bg-white/5 backdrop-blur-xl p-6 md:p-8 flex flex-col items-center justify-center gap-6 md:gap-8 transition-all duration-500 hover:scale-[1.02] border border-white/5 hover:border-${color}-500/30 overflow-hidden active:scale-95`}
         >
             {/* Background Gradient Blob */}
             <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-${color}-500/20 rounded-full blur-[80px] opacity-0 group-hover:opacity-100 transition-opacity duration-700`}></div>
@@ -56,7 +59,7 @@ const App = () => {
         };
 
         return (
-            <button onClick={onClick} className={`group min-h-[140px] md:h-64 rounded-[24px] md:rounded-[32px] liquid-glass p-5 md:p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:${colorMap[color].split(' ').pop()}`}>
+            <button onClick={onClick} className={`group min-h-[140px] md:h-64 rounded-[24px] md:rounded-[32px] bg-white/5 backdrop-blur-xl p-5 md:p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:${colorMap[color].split(' ').pop()}`}>
                 <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg ${colorMap[color].split(' ').slice(0, 4).join(' ')}`}>
                     {icon}
                 </div>
@@ -97,7 +100,7 @@ const App = () => {
     const renderSimulatorsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/10 text-slate-400 hover:text-white transition-colors backdrop-blur-md">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">СИМУЛЯТОРЫ</h2>
@@ -117,7 +120,7 @@ const App = () => {
     const renderCalculationsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/10 text-slate-400 hover:text-white transition-colors backdrop-blur-md">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">РАСЧЕТЫ</h2>
@@ -139,7 +142,7 @@ const App = () => {
     const renderReferenceSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/10 text-slate-400 hover:text-white transition-colors backdrop-blur-md">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">ЗНАНИЯ</h2>
@@ -156,14 +159,28 @@ const App = () => {
         </div>
     );
 
-    if (appMode === 'launcher') {
+    // Main App View Logic
+    const renderContent = () => {
+        if (appMode === 'simulator') return <Simulator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'calculator') return <VelocityCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'heater-calculator') return <HeaterCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'exchange-calculator') return <AirExchangeCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'pressure-calculator') return <PressureLossCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'acoustic-calculator') return <AcousticCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'mixing-calculator') return <MixingCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'psychrometry-calculator') return <PsychrometryCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'calc-cooling') return <CoolingCalculator onBack={goBack} onHome={goHome} />;
+        if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
+        if (appMode === 'smoke-calculator') return <SmokeCalculator onBack={goBack} onHome={goHome} />;
+
+        // Launcher Mode
         return (
-            <div className="flex min-h-screen bg-[#020205] text-white font-sans overflow-x-hidden items-center justify-center relative">
+            <div className="flex min-h-screen items-center justify-center relative overflow-hidden">
                 {/* AMBIENT BACKGROUND */}
                 <div className="absolute top-0 -left-40 w-[600px] h-[600px] bg-blue-600/20 rounded-full mix-blend-screen filter blur-[120px] opacity-40 animate-blob"></div>
                 <div className="absolute top-0 -right-40 w-[600px] h-[600px] bg-purple-600/20 rounded-full mix-blend-screen filter blur-[120px] opacity-40 animate-blob animation-delay-2000"></div>
                 <div className="absolute -bottom-40 left-20 w-[600px] h-[600px] bg-emerald-600/20 rounded-full mix-blend-screen filter blur-[120px] opacity-40 animate-blob animation-delay-4000"></div>
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150"></div>
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 pointer-events-none"></div>
 
                 <div className="z-10 flex flex-col items-center gap-10 md:gap-16 w-full p-4 md:p-8 h-full pt-12 md:pt-8">
                     <div className={`text-center space-y-2 md:space-y-6 transition-all duration-700 ${launcherSection !== 'main' ? 'scale-75 opacity-0 absolute -top-20' : ''}`}>
@@ -182,24 +199,13 @@ const App = () => {
                 </div>
             </div>
         );
-    }
+    };
 
-    const goBack = () => setAppMode('launcher');
-    const goHome = () => { setAppMode('launcher'); setLauncherSection('main'); };
-
-    if (appMode === 'simulator') return <Simulator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'calculator') return <VelocityCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'heater-calculator') return <HeaterCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'exchange-calculator') return <AirExchangeCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'pressure-calculator') return <PressureLossCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'acoustic-calculator') return <AcousticCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'mixing-calculator') return <MixingCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'psychrometry-calculator') return <PsychrometryCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'calc-cooling') return <CoolingCalculator onBack={goBack} onHome={goHome} />;
-    if (appMode === 'reference-wiki') return <KnowledgeCenter initialSection="wiki" onBack={goBack} onHome={goHome} />;
-    if (appMode === 'smoke-calculator') return <SmokeCalculator onBack={goBack} onHome={goHome} />;
-
-    return null;
+    return (
+        <div className="relative w-full min-h-screen bg-[#020205] text-slate-200 font-sans">
+            {renderContent()}
+        </div>
+    );
 };
 
 export default App;

@@ -3,12 +3,12 @@ import {
   Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info
 } from 'lucide-react';
 
-import { SPECS, DIFFUSER_CATALOG } from '../../../../constants'; // Путь скорректирован
-import { useScientificSimulation, calculateVelocityField, analyzeCoverage, calculateWorkzoneVelocityAndCoverage, calculatePerformance } from '../../../../hooks/useSimulation'; // Путь скорректирован
+import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
+import { useScientificSimulation, calculateVelocityField, analyzeCoverage, calculateWorkzoneVelocityAndCoverage, calculatePerformance } from '../../../../hooks/useSimulation';
 import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
-import { PlacedDiffuser, PerformanceResult } from '../../../../types'; // Путь скорректирован
+import { PlacedDiffuser, PerformanceResult } from '../../../../types';
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
@@ -21,7 +21,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [snapToGrid, setSnapToGrid] = useState(false);
     const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); // New state for mobile stats
+    const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
     const [openSection, setOpenSection] = useState<string | null>('distributor');
 
     // Simulation Data
@@ -62,9 +62,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     useEffect(() => {
         if (viewMode !== 'top' || placedDiffusers.length === 0) { setVelocityField([]); return; }
         
-        // Dynamic Resolution:
-        // When dragging: Use coarse step (0.5m) -> Fast updates (144 points for 6x6m)
-        // When static: Use fine step (0.1m) -> High precision (3600 points for 6x6m)
         const step = isDragging ? 0.5 : 0.1;
         
         setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step));
@@ -165,7 +162,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     };
 
     return (
-        <div className="flex w-full h-[100dvh] bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden selection:bg-blue-500/30">
+        <div className="flex w-full h-[100dvh] bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden">
              {/* AMBIENT BACKGROUND */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
@@ -214,7 +211,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                     />
                 </div>
                 
-                 {/* FLOATING "ISLAND" BAR (Mobile Optimized) */}
+                 {/* FLOATING "ISLAND" BAR (Controls) */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
                     <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-[#0f1014]/90 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
                          <button onClick={() => setViewMode('side')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>

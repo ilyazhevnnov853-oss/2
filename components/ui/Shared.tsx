@@ -3,7 +3,7 @@ import { Home, ChevronLeft } from 'lucide-react';
 
 // --- HEADER ---
 export const AppHeader = ({ title, subtitle, icon, onBack, onHome, rightContent }: any) => (
-    <div className="flex items-center justify-between p-4 mb-6 liquid-glass rounded-3xl shrink-0 relative z-30 mx-4 mt-4">
+    <div className="flex items-center justify-between p-4 mb-6 bg-[#14141e]/40 backdrop-blur-2xl rounded-3xl shrink-0 relative z-30 mx-4 mt-4 border border-white/5">
         <div className="flex items-center gap-4">
             <div className="flex gap-2">
                 <button onClick={onHome} className="p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all active:scale-95 border border-white/5">
@@ -15,7 +15,7 @@ export const AppHeader = ({ title, subtitle, icon, onBack, onHome, rightContent 
                     </button>
                 )}
             </div>
-            <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent"></div>
+            <div className="h-8 w-px bg-white/10"></div>
             <div className="flex items-center gap-4">
                 <div className="p-2.5 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-2xl text-white shadow-lg shadow-blue-500/20">
                     {icon}
@@ -52,16 +52,16 @@ export const GlassMetric = ({ label, value, unit, color }: any) => (
 
 // --- LIQUID BUTTON ---
 export const GlassButton = ({ onClick, icon, label, active, secondary, customClass, disabled }: any) => {
-    let base = "relative overflow-hidden group h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wide shadow-lg active:scale-95 ";
+    let base = "relative overflow-hidden group h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wide shadow-md active:scale-95 ";
     
     // Active / Primary Style
     let style = active 
         ? "bg-blue-600 text-white shadow-blue-500/30 border border-blue-400/50" 
-        : "bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10 hover:border-white/10 hover:text-white";
+        : "bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10 hover:text-white";
 
     if (secondary) {
          style = active 
-            ? "bg-white text-black shadow-white/20" 
+            ? "bg-white text-black shadow-black/5" 
             : "bg-white/5 text-slate-300 border border-white/5 hover:bg-white/10";
     }
 
@@ -70,7 +70,7 @@ export const GlassButton = ({ onClick, icon, label, active, secondary, customCla
 
     return (
         <button onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
-            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <span className={active ? 'scale-110' : 'group-hover:scale-110 transition-transform duration-300'}>{icon}</span>
             {label && <span>{label}</span>}
         </button>
@@ -91,7 +91,7 @@ export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, 
     return (
         <div className="group select-none">
             <div className="flex justify-between items-end mb-3 px-1">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
                     {icon} {label}
                 </div>
                 <div className="text-xs font-mono font-bold text-white bg-white/5 px-2.5 py-1 rounded-lg border border-white/10 min-w-[60px] text-center shadow-inner">
@@ -101,7 +101,7 @@ export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, 
             
             <div className="relative h-5 w-full touch-none flex items-center cursor-pointer">
                 {/* Track Background (Glass Tube) */}
-                <div className="absolute inset-0 h-4 top-1/2 -translate-y-1/2 bg-black/40 rounded-full border border-white/5 shadow-[inset_0_2px_4px_rgba(0,0,0,0.5)]"></div>
+                <div className="absolute inset-0 h-4 top-1/2 -translate-y-1/2 bg-black/40 rounded-full border border-white/5 shadow-inner"></div>
                 
                 {/* Active Fluid */}
                 <div 

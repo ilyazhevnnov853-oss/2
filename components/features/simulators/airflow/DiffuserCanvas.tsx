@@ -11,7 +11,7 @@ const CONSTANTS = {
   SPAWN_RATE_MULTIPLIER: 8
 };
 
-// --- HELPER FUNCTIONS (Moved outside for micro-optimization) ---
+// --- HELPER FUNCTIONS ---
 const getGlowColor = (t: number) => {
     if (t <= 18) return `64, 224, 255`; 
     if (t >= 28) return `255, 99, 132`; 
@@ -98,7 +98,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
     const isOffscreenDirty = useRef<boolean>(true);
 
     // --- STRICT REF PATTERN ---
-    // Holds the latest props to avoid re-creating the animate loop
     const simulationRef = useRef(props);
 
     // --- PARTICLE POOL ---
@@ -198,7 +197,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             p.waveFreq = waveFreq; p.wavePhase = 0; p.waveAmp = waveAmp;
             p.isHorizontal = isHorizontal; p.isSuction = isSuction;
         } else {
-            // Supply Logic
+            // Supply Logic (Standard)
             if (flowType.includes('horizontal')) {
                 isHorizontal = true;
                 const side = Math.random() > 0.5 ? 1 : -1;
@@ -314,7 +313,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
-            ctx.font = '10px Inter';
+            ctx.font = 'bold 10px Inter';
             ctx.fillText(`РАБОЧАЯ ЗОНА (${state.workZoneHeight}м)`, 10, wzY - 5);
         }
     };
@@ -331,20 +330,23 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         const ctx = cvs.getContext('2d', { alpha: false });
         if (!ctx) return;
 
-        // Clear
-        ctx.fillStyle = '#050505';
+        // Clear with Theme Background
+        ctx.fillStyle = '#050505'; 
         ctx.fillRect(0, 0, state.width, state.height);
 
         const { ppm, originX, originY } = getLayout(state.width, state.height, state.roomWidth || 6, state.roomLength || 6, state.roomHeight, 'top');
 
         const roomPixW = (state.roomWidth || 6) * ppm;
         const roomPixL = (state.roomLength || 6) * ppm;
-        ctx.fillStyle = '#0f172a';
+        
+        ctx.fillStyle = '#0f172a'; // Room Floor
         ctx.fillRect(originX, originY, roomPixW, roomPixL);
 
         // Heatmap
-        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0 && state.gridStep) {
-            const stepPx = state.gridStep * ppm;
+        // Ensure gridStep is defined and defaults to 0.1 if missing
+        const gStep = state.gridStep || 0.1;
+        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0) {
+            const stepPx = gStep * ppm;
             const comfortPath = new Path2D();
             const warningPath = new Path2D();
             const draftPath = new Path2D();
@@ -352,10 +354,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             for (let r = 0; r < state.velocityField.length; r++) {
                 for (let c = 0; c < state.velocityField[r].length; c++) {
                     const v = state.velocityField[r][c];
-                    if (v < 0.1) continue;
+                    // Lower threshold to visualize lower velocities
+                    if (v < 0.05) continue; 
                     
                     const x = originX + c * stepPx;
                     const y = originY + r * stepPx;
+                    // Slightly overlap rects to avoid grid lines
                     const drawSize = stepPx + 0.5;
 
                     if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
@@ -364,11 +368,11 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 }
             }
 
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.3)'; // Increased opacity
             ctx.fill(comfortPath);
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.4)';
             ctx.fill(warningPath);
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
             ctx.fill(draftPath);
         }
 
@@ -460,9 +464,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 }
             }
 
-            // 2. UPDATE PHYSICS
+            // 2. UPDATE PHYSICS (Same as before)
             const maxH = height;
-            
             for (let i = 0; i < pool.length; i++) {
                 const p = pool[i];
                 if (!p.active) continue;
@@ -503,7 +506,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                     }
 
                     if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
-                        // Limit history length to prevent unbounded growth in reused object
                         if (p.history.length > 20) p.history.shift();
                         p.history.push({ x: p.x, y: p.y, age: p.age });
                         p.lastHistoryTime = p.age;
@@ -528,7 +530,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                     const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
                     ctx.moveTo(p.x + wx, p.y + wy);
                     
-                    // Iterate backwards for trail
                     for (let j = p.history.length - 1; j >= 0; j--) {
                         const h = p.history[j];
                         const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
@@ -629,7 +630,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         }
 
         requestRef.current = requestAnimationFrame(animate);
-    }, []); // Empty dependency array ensures animate is never recreated!
+    }, []); 
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);
@@ -638,8 +639,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         };
     }, [animate]);
 
-    // --- INTERACTION HANDLERS (using refs mostly) ---
-    
+    // ... (Interactions remain the same)
     const getMousePos = (e: React.MouseEvent | React.TouchEvent) => {
         const rect = canvasRef.current?.getBoundingClientRect();
         if (!rect) return { x: 0, y: 0 };
