@@ -102,7 +102,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
             `}>
                 <div className="flex-1 flex flex-col rounded-[32px] bg-[#0a0a0f]/80 backdrop-blur-2xl border border-white/5 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] ring-1 ring-white/5">
                     {/* Header */}
-                    <div className="p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative">
+                    <div className="p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative pt-safe-top">
                          <div className="flex justify-between items-center lg:hidden mb-4">
                             <h2 className="text-lg font-bold text-white">Меню</h2>
                             <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
@@ -273,96 +273,96 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
             </div>
 
             {/* RIGHT CONTENT (Visualization) */}
-            <div className="flex-1 flex flex-col relative h-screen overflow-hidden p-4 pl-0">
-                <div className="flex-1 rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border border-white/5 ring-1 ring-white/5 group flex flex-col">
+            <div className="flex-1 flex flex-col relative h-[100dvh] lg:h-screen overflow-hidden p-0 lg:p-4 lg:pl-0">
+                <div className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border-t lg:border border-white/5 ring-1 ring-white/5 group flex flex-col">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
                     <div className={`absolute inset-0 bg-gradient-to-b from-purple-900/10 to-transparent pointer-events-none transition-colors duration-700`}></div>
 
                     {/* Mobile Toggle */}
-                    <button onClick={() => setIsMobileMenuOpen(true)} className={`lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-purple-600 text-white shadow-lg`}>
+                    <button onClick={() => setIsMobileMenuOpen(true)} className={`lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-purple-600 text-white shadow-lg pt-safe-top mt-2`}>
                         <Menu size={20} />
                     </button>
 
                     {/* Main Display */}
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 relative z-10">
+                    <div className="flex-1 flex flex-col items-center justify-center p-4 lg:p-8 relative z-10 overflow-y-auto custom-scrollbar">
                         
                         {/* Glow Effect */}
-                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px] animate-pulse`}></div>
+                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 md:w-96 h-64 md:h-96 bg-purple-500/10 rounded-full blur-[80px] md:blur-[100px] animate-pulse`}></div>
 
-                        <div className="text-center space-y-2 mb-12">
-                            <span className="text-xs font-bold text-slate-500 uppercase tracking-[0.3em]">Полные потери</span>
+                        <div className="text-center space-y-2 mb-8 md:mb-12 mt-10 md:mt-0">
+                            <span className="text-[10px] md:text-xs font-bold text-slate-500 uppercase tracking-[0.3em]">Полные потери</span>
                             <div className="flex items-baseline justify-center gap-2">
-                                <span className={`text-8xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-purple-200 tracking-tighter drop-shadow-2xl`}>
+                                <span className={`text-6xl md:text-9xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-purple-200 tracking-tighter drop-shadow-2xl`}>
                                     {totalLoss.toFixed(0)}
                                 </span>
-                                <span className={`text-2xl font-black ${textColor} uppercase`}>Па</span>
+                                <span className={`text-xl md:text-2xl font-black ${textColor} uppercase`}>Па</span>
                             </div>
                         </div>
 
                         {/* Secondary Metrics Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-6 w-full max-w-2xl">
                              {/* Friction Loss */}
-                             <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-indigo-500/20 text-indigo-400">
-                                        <Wind size={24}/>
+                             <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-indigo-500/20 text-indigo-400">
+                                        <Wind size={20} className="md:w-6 md:h-6"/>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">На трение</div>
-                                        <div className="text-sm text-slate-400">По длине {length}м</div>
+                                        <div className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">На трение</div>
+                                        <div className="text-xs md:text-sm text-slate-400">По длине {length}м</div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-3xl font-black text-white">{frictionLoss.toFixed(0)} <span className="text-sm text-slate-500">Па</span></div>
-                                    <div className="text-[10px] text-slate-500">{(frictionLoss/length).toFixed(1)} Па/м</div>
+                                    <div className="text-xl md:text-3xl font-black text-white">{frictionLoss.toFixed(0)} <span className="text-xs md:text-sm text-slate-500">Па</span></div>
+                                    <div className="text-[9px] md:text-[10px] text-slate-500">{(frictionLoss/length).toFixed(1)} Па/м</div>
                                 </div>
                             </div>
 
                             {/* Local Loss */}
-                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-pink-500/20 text-pink-400">
-                                        <Activity size={24}/>
+                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-pink-500/20 text-pink-400">
+                                        <Activity size={20} className="md:w-6 md:h-6"/>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Местные</div>
-                                        <div className="text-sm text-slate-400">КМС = {zeta}</div>
+                                        <div className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">Местные</div>
+                                        <div className="text-xs md:text-sm text-slate-400">КМС = {zeta}</div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-3xl font-black text-white">{localLoss.toFixed(0)} <span className="text-sm text-slate-500">Па</span></div>
+                                    <div className="text-xl md:text-3xl font-black text-white">{localLoss.toFixed(0)} <span className="text-xs md:text-sm text-slate-500">Па</span></div>
                                 </div>
                             </div>
 
                             {/* Velocity */}
-                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-blue-500/20 text-blue-400">
-                                        <Wind size={24}/>
+                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-blue-500/20 text-blue-400">
+                                        <Wind size={20} className="md:w-6 md:h-6"/>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Скорость</div>
-                                        <div className="text-sm text-slate-400">Потока</div>
+                                        <div className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">Скорость</div>
+                                        <div className="text-xs md:text-sm text-slate-400">Потока</div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-3xl font-black text-white">{velocity.toFixed(1)} <span className="text-sm text-slate-500">м/с</span></div>
+                                    <div className="text-xl md:text-3xl font-black text-white">{velocity.toFixed(1)} <span className="text-xs md:text-sm text-slate-500">м/с</span></div>
                                 </div>
                             </div>
                             
                             {/* Dynamic Pressure */}
-                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
-                                <div className="flex items-center gap-4">
-                                    <div className="p-3 rounded-2xl bg-purple-500/20 text-purple-400">
-                                        <Gauge size={24}/>
+                            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl md:rounded-3xl p-4 md:p-6 flex items-center justify-between group hover:bg-white/10 transition-colors">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <div className="p-2 md:p-3 rounded-xl md:rounded-2xl bg-purple-500/20 text-purple-400">
+                                        <Gauge size={20} className="md:w-6 md:h-6"/>
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Дин. Напор</div>
-                                        <div className="text-sm text-slate-400">Pd</div>
+                                        <div className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">Дин. Напор</div>
+                                        <div className="text-xs md:text-sm text-slate-400">Pd</div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-3xl font-black text-white">{((1.2 * velocity * velocity)/2).toFixed(0)} <span className="text-sm text-slate-500">Па</span></div>
+                                    <div className="text-xl md:text-3xl font-black text-white">{((1.2 * velocity * velocity)/2).toFixed(0)} <span className="text-xs md:text-sm text-slate-500">Па</span></div>
                                 </div>
                             </div>
 

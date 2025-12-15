@@ -23,7 +23,7 @@ const App = () => {
     const LauncherCard = ({ onClick, icon, title, desc, color }: any) => (
         <button 
             onClick={onClick}
-            className={`group relative h-64 md:h-80 rounded-[40px] liquid-glass p-6 md:p-8 flex flex-col items-center justify-center gap-6 md:gap-8 transition-all duration-500 hover:scale-[1.02] border border-white/5 hover:border-${color}-500/30 overflow-hidden active:scale-95`}
+            className={`group relative h-64 md:h-80 rounded-[32px] md:rounded-[40px] liquid-glass p-6 md:p-8 flex flex-col items-center justify-center gap-6 md:gap-8 transition-all duration-500 hover:scale-[1.02] border border-white/5 hover:border-${color}-500/30 overflow-hidden active:scale-95`}
         >
             {/* Background Gradient Blob */}
             <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-${color}-500/20 rounded-full blur-[80px] opacity-0 group-hover:opacity-100 transition-opacity duration-700`}></div>
@@ -43,8 +43,33 @@ const App = () => {
         </button>
     );
 
+    const CalcCard = ({ onClick, icon, title, desc, color }: any) => {
+        const colorMap: Record<string, string> = {
+            emerald: 'bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white border-emerald-500/30',
+            orange: 'bg-orange-500/20 text-orange-400 group-hover:bg-orange-500 group-hover:text-white border-orange-500/30',
+            blue: 'bg-blue-500/20 text-blue-400 group-hover:bg-blue-500 group-hover:text-white border-blue-500/30',
+            purple: 'bg-purple-500/20 text-purple-400 group-hover:bg-purple-500 group-hover:text-white border-purple-500/30',
+            rose: 'bg-rose-500/20 text-rose-400 group-hover:bg-rose-500 group-hover:text-white border-rose-500/30',
+            cyan: 'bg-cyan-500/20 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white border-cyan-500/30',
+            sky: 'bg-sky-500/20 text-sky-400 group-hover:bg-sky-500 group-hover:text-white border-sky-500/30',
+            red: 'bg-red-500/20 text-red-400 group-hover:bg-red-500 group-hover:text-white border-red-500/30',
+        };
+
+        return (
+            <button onClick={onClick} className={`group min-h-[140px] md:h-64 rounded-[24px] md:rounded-[32px] liquid-glass p-5 md:p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:${colorMap[color].split(' ').pop()}`}>
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center transition-colors shadow-lg ${colorMap[color].split(' ').slice(0, 4).join(' ')}`}>
+                    {icon}
+                </div>
+                <div>
+                    <h3 className="text-lg md:text-2xl font-bold text-white mb-1 md:mb-2 leading-tight">{title}</h3>
+                    <p className="text-xs md:text-sm text-slate-400 font-medium line-clamp-2 md:line-clamp-none">{desc}</p>
+                </div>
+            </button>
+        );
+    };
+
     const renderMainLauncher = () => (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-7xl animate-in zoom-in-95 duration-700 pb-20 md:pb-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 w-full max-w-7xl animate-in zoom-in-95 duration-700 pb-20 md:pb-0">
             <LauncherCard 
                 onClick={() => setLauncherSection('simulators')}
                 icon={<Wind className="w-10 h-10 md:w-12 md:h-12" strokeWidth={1.5} />}
@@ -71,146 +96,62 @@ const App = () => {
 
     const renderSimulatorsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
-             <div className="flex items-center gap-6 mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+             <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                     <ChevronLeft size={24}/>
                 </button>
-                <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">СИМУЛЯТОРЫ</h2>
+                <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">СИМУЛЯТОРЫ</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
-                <button onClick={() => setAppMode('simulator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-blue-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors shadow-lg">
-                        <Wind size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">HVACLAB</h3>
-                        <p className="text-sm text-slate-400 font-medium">Моделирование распределения воздуха в помещении</p>
-                    </div>
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 pb-20">
+                <CalcCard 
+                    onClick={() => setAppMode('simulator')}
+                    icon={<Wind size={24} />}
+                    title="HVACLAB"
+                    desc="Моделирование распределения воздуха в помещении"
+                    color="blue"
+                />
             </div>
         </div>
     );
 
     const renderCalculationsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
-             <div className="flex items-center gap-6 mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+             <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                     <ChevronLeft size={24}/>
                 </button>
-                <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">РАСЧЕТЫ</h2>
+                <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">РАСЧЕТЫ</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <button onClick={() => setAppMode('calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-emerald-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-colors shadow-lg">
-                        <Calculator size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Скорость воздуха</h3>
-                        <p className="text-sm text-slate-400 font-medium">Подбор сечения воздуховода по скорости</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('heater-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-orange-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-colors shadow-lg">
-                        <Zap size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Мощность калорифера</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет нагрева и охлаждения воздуха</p>
-                    </div>
-                </button>
-
-                 <button onClick={() => setAppMode('exchange-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-blue-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors shadow-lg">
-                        <Users size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Расчет воздухообмена</h3>
-                        <p className="text-sm text-slate-400 font-medium">По кратности и количеству людей</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('pressure-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-purple-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-purple-500/20 flex items-center justify-center text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-colors shadow-lg">
-                        <Gauge size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Потери давления</h3>
-                        <p className="text-sm text-slate-400 font-medium">Аэродинамический расчет на трение и КМС</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('acoustic-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-rose-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-rose-500/20 flex items-center justify-center text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-colors shadow-lg">
-                        <Volume2 size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Суммирование шума</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет общего уровня звукового давления</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('mixing-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-cyan-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white transition-colors shadow-lg">
-                        <GitMerge size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Смешение воздуха</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет температуры смеси двух потоков</p>
-                    </div>
-                </button>
-
-                 <button onClick={() => setAppMode('psychrometry-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-sky-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-sky-500/20 flex items-center justify-center text-sky-400 group-hover:bg-sky-500 group-hover:text-white transition-colors shadow-lg">
-                        <CloudRain size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Влажный воздух</h3>
-                        <p className="text-sm text-slate-400 font-medium">Психрометрия: ID-диаграмма, энтальпия, точка росы</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('calc-cooling')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-cyan-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white transition-colors shadow-lg">
-                        <Thermometer size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Кондиционирование</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет теплопритоков</p>
-                    </div>
-                </button>
-
-                <button onClick={() => setAppMode('smoke-calculator')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-red-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-red-500/20 flex items-center justify-center text-red-400 group-hover:bg-red-500 group-hover:text-white transition-colors shadow-lg">
-                        <Flame size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Противодымная защита</h3>
-                        <p className="text-sm text-slate-400 font-medium">Расчет ДУ и подпора воздуха</p>
-                    </div>
-                </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+                <CalcCard onClick={() => setAppMode('calculator')} icon={<Calculator size={24}/>} title="Скорость воздуха" desc="Подбор сечения воздуховода по скорости" color="emerald"/>
+                <CalcCard onClick={() => setAppMode('heater-calculator')} icon={<Zap size={24}/>} title="Мощность калорифера" desc="Расчет нагрева и охлаждения воздуха" color="orange"/>
+                <CalcCard onClick={() => setAppMode('exchange-calculator')} icon={<Users size={24}/>} title="Расчет воздухообмена" desc="По кратности и количеству людей" color="blue"/>
+                <CalcCard onClick={() => setAppMode('pressure-calculator')} icon={<Gauge size={24}/>} title="Потери давления" desc="Аэродинамический расчет на трение и КМС" color="purple"/>
+                <CalcCard onClick={() => setAppMode('acoustic-calculator')} icon={<Volume2 size={24}/>} title="Суммирование шума" desc="Расчет общего уровня звукового давления" color="rose"/>
+                <CalcCard onClick={() => setAppMode('mixing-calculator')} icon={<GitMerge size={24}/>} title="Смешение воздуха" desc="Расчет температуры смеси двух потоков" color="cyan"/>
+                <CalcCard onClick={() => setAppMode('psychrometry-calculator')} icon={<CloudRain size={24}/>} title="Влажный воздух" desc="Психрометрия: ID-диаграмма, энтальпия, точка росы" color="sky"/>
+                <CalcCard onClick={() => setAppMode('calc-cooling')} icon={<Thermometer size={24}/>} title="Кондиционирование" desc="Расчет теплопритоков" color="cyan"/>
+                <CalcCard onClick={() => setAppMode('smoke-calculator')} icon={<Flame size={24}/>} title="Противодымная защита" desc="Расчет ДУ и подпора воздуха" color="red"/>
             </div>
         </div>
     );
 
     const renderReferenceSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
-             <div className="flex items-center gap-6 mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
+             <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
+                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl liquid-glass hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
                     <ChevronLeft size={24}/>
                 </button>
-                <h2 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">ЗНАНИЯ</h2>
+                <h2 className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 tracking-tight">ЗНАНИЯ</h2>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <button onClick={() => setAppMode('reference-wiki')} className="group h-64 rounded-[32px] liquid-glass p-8 flex flex-col justify-between text-left hover:scale-[1.02] transition-transform border border-white/5 hover:border-amber-500/30">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500 group-hover:text-white transition-colors shadow-lg">
-                        <BookOpen size={24} />
-                    </div>
-                    <div>
-                        <h3 className="text-2xl font-bold text-white mb-2">Справочник</h3>
-                        <p className="text-sm text-slate-400 font-medium">Теория, формулы и нормативная документация</p>
-                    </div>
-                </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                <CalcCard 
+                    onClick={() => setAppMode('reference-wiki')}
+                    icon={<BookOpen size={24} />}
+                    title="Справочник"
+                    desc="Теория, формулы и нормативная документация"
+                    color="orange"
+                />
             </div>
         </div>
     );
@@ -224,12 +165,12 @@ const App = () => {
                 <div className="absolute -bottom-40 left-20 w-[600px] h-[600px] bg-emerald-600/20 rounded-full mix-blend-screen filter blur-[120px] opacity-40 animate-blob animation-delay-4000"></div>
                 <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150"></div>
 
-                <div className="z-10 flex flex-col items-center gap-10 md:gap-16 w-full p-6 md:p-8 h-full">
-                    <div className={`text-center space-y-4 md:space-y-6 transition-all duration-700 ${launcherSection !== 'main' ? 'scale-75 opacity-0 absolute -top-20' : ''}`}>
-                         <h1 className="text-5xl md:text-6xl lg:text-8xl font-black tracking-tighter text-white drop-shadow-2xl mt-10 md:mt-0">
+                <div className="z-10 flex flex-col items-center gap-10 md:gap-16 w-full p-4 md:p-8 h-full pt-12 md:pt-8">
+                    <div className={`text-center space-y-2 md:space-y-6 transition-all duration-700 ${launcherSection !== 'main' ? 'scale-75 opacity-0 absolute -top-20' : ''}`}>
+                         <h1 className="text-5xl md:text-6xl lg:text-8xl font-black tracking-tighter text-white drop-shadow-2xl">
                             HVAC<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400">LAB</span>
                         </h1>
-                        <p className="text-blue-200/60 text-xs md:text-sm font-bold tracking-[0.3em] uppercase">Инженерный комплекс</p>
+                        <p className="text-blue-200/60 text-[10px] md:text-sm font-bold tracking-[0.3em] uppercase">Инженерный комплекс</p>
                     </div>
 
                     <div className="w-full flex justify-center flex-1">

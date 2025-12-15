@@ -83,14 +83,6 @@ export const ENGINEERING_DATA: EngineeringData = {
       "450x450": [{vol:300, pa:8, db:25, throw:2.0}, {vol:600, pa:30, db:35, throw:4.0}],
       "600x600": [{vol:500, pa:10, db:25, throw:2.5}, {vol:1000, pa:35, db:40, throw:5.0}]
     }
-  },
-  'dpu-o': { 
-    'suction': {
-      100: [{vol:50, pa:10, db:20, throw:0}, {vol:100, pa:30, db:35, throw:0}],
-      125: [{vol:80, pa:10, db:20, throw:0}, {vol:150, pa:30, db:35, throw:0}],
-      160: [{vol:120, pa:12, db:20, throw:0}, {vol:250, pa:35, db:35, throw:0}],
-      200: [{vol:200, pa:15, db:20, throw:0}, {vol:400, pa:40, db:35, throw:0}]
-    }
   }
 };
 
@@ -129,12 +121,6 @@ export const DIFFUSER_CATALOG: DiffuserModel[] = [
         id: '4ap', series: '4АП', name: 'Потолочный',
         modes: [
             { id: '4ap-4way', name: '4-сторонняя', subtitle: 'Веерная', b_text: '360°', flowType: '4-way', icon: <Box size={16}/> }
-        ]
-    },
-    {
-        id: 'dpu-o', series: 'ДПУ-О', name: 'Вытяжной',
-        modes: [
-            { id: 'exhaust-mode', name: 'Всасывание', subtitle: 'Вытяжка', b_text: '-', flowType: 'suction', icon: <RotateCcw size={16}/> }
         ]
     }
 ];
