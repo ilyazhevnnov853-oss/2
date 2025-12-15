@@ -73,36 +73,37 @@ export const SimulatorLeftPanel = ({
                 <div className="flex-1 flex flex-col h-full lg:rounded-[32px] bg-white lg:bg-white/80 dark:bg-[#0a0a0f] lg:dark:bg-[#0a0a0f]/80 backdrop-blur-2xl lg:border border-black/5 dark:border-white/5 overflow-hidden ring-1 ring-black/5 dark:ring-white/5">
                     {/* Header */}
                     <div className="p-5 lg:p-6 border-b border-black/5 dark:border-white/5 bg-gradient-to-b from-black/5 dark:from-white/5 to-transparent relative pt-safe-top">
-                        <div className="flex justify-between items-center lg:hidden mb-4">
-                            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Настройки</h2>
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-black/5 dark:bg-white/10 rounded-lg text-slate-500 dark:text-white"><X size={20} /></button>
-                        </div>
-                        
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex gap-2">
-                                 <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
-                                    <Home size={18} />
-                                 </button>
-                                 {onBack && (
-                                     <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
-                                        <ChevronLeft size={18} />
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="flex gap-2">
+                                     <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
+                                        <Home size={18} />
                                      </button>
-                                 )}
+                                     {onBack && (
+                                         <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
+                                            <ChevronLeft size={18} />
+                                         </button>
+                                     )}
+                                     <button onClick={toggleTheme} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-amber-500 dark:text-blue-400">
+                                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+                                    </button>
+                                </div>
+
+                                <div className="h-8 w-px bg-black/10 dark:bg-white/10 hidden lg:block"></div>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-lg shadow-blue-500/20 text-white">
+                                        <Wind size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">HVACLAB</h2>
+                                        <p className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-0.5">Инженерный комплекс</p>
+                                    </div>
+                                </div>
                             </div>
 
-                            <button onClick={toggleTheme} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-amber-500 dark:text-blue-400">
-                                {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                            </button>
-                        </div>
-
-                        <div className="hidden lg:flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-lg shadow-blue-500/20 text-white">
-                                <Wind size={20} />
-                                </div>
-                                <div>
-                                <h2 className="text-lg font-black text-slate-900 dark:text-white leading-none tracking-tight">HVACLAB</h2>
-                                <p className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest mt-0.5">Инженерный комплекс</p>
-                                </div>
+                            {/* Mobile Close Button */}
+                            <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2 bg-black/5 dark:bg-white/10 rounded-lg text-slate-500 dark:text-slate-400 hover:text-white"><X size={20} /></button>
                         </div>
                     </div>
 
