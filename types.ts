@@ -57,6 +57,7 @@ export interface PerformanceResult {
   error?: string | null;
   workzoneVelocity: number;
   coverageRadius: number;
+  Ar?: number; // Archimedes number for buoyancy
 }
 
 export interface PlacedDiffuser {

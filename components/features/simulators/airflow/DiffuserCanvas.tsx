@@ -230,8 +230,15 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         let isHorizontal = false;
         let isSuction = false;
 
-        // Buoyancy force (Архимедова сила)
-        const buoyancy = -(dtTemp / 293) * 9.81 * ppm * 4.0;
+        // --- НОВАЯ ФИЗИКА (Archimedes Number) ---
+        // Сила плавучести нормируется через Ar и v0. 
+        // Fy ~ Ar * v0^2 / l0
+        // Упрощаем для визуализации: чем больше Ar, тем сильнее отклонение от прямой
+        const physicsAr = physics.Ar || 0; 
+        const visualGain = 50.0; // Коэффициент усиления для визуальной заметности
+        // Ar > 0 (нагрев) -> buoyancy < 0 (вверх, так как Y вниз)
+        // Ar < 0 (охлаждение) -> buoyancy > 0 (вниз)
+        const buoyancy = -physicsAr * (physics.v0 * physics.v0) * ppm * visualGain;
 
         if (flowType === 'suction') {
             isSuction = true;

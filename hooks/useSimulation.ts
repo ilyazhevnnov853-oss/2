@@ -14,28 +14,48 @@ export const interpolate = (val: number, x0: number, x1: number, y0: number, y1:
     return y0 + ((val - x0) * (y1 - y0)) / (x1 - x0);
 };
 
-export const calculateWorkzoneVelocityAndCoverage = (v0: number, finalThrow: number, spec_A: number, diffuserHeight: number, workZoneHeight: number) => {
-    const distanceToWorkzone = diffuserHeight - workZoneHeight;
+export const calculateWorkzoneVelocityAndCoverage = (
+    v0: number, 
+    spec_A: number, // Ak (Effective Area) in mm²
+    diffuserHeight: number, 
+    workZoneHeight: number,
+    m: number = 2.0 // Аэродинамический коэффициент формы (для решеток ~2-3, для сопел ~5-6)
+) => {
+    const dist = diffuserHeight - workZoneHeight;
     
-    if (distanceToWorkzone <= 0) {
-        const workzoneVelocity = v0;
-        const coverageRadius = spec_A / 2000.0;
-        return { workzoneVelocity, coverageRadius };
-    }
-    
-    if (distanceToWorkzone > finalThrow) {
-        return { workzoneVelocity: V_TERMINAL, coverageRadius: 0.0 };
+    // Эффективный диаметр (характерный размер)
+    // spec_A приходит в mm², переводим в м² для расчета l0 (в метрах)
+    const Ak_m2 = spec_A > 0 ? spec_A / 1000000 : 0; 
+    const l0 = Math.sqrt(Ak_m2); 
+    const coreZone = 5 * l0; // Длина начального участка примерно 5 калибров
+
+    if (dist <= 0) {
+        // Внутри диффузора или выше
+        const initialRadius = Math.sqrt(spec_A) / 2000.0; // Примерный радиус в метрах
+        return { workzoneVelocity: v0, coverageRadius: initialRadius };
     }
 
-    // Линейное затухание скорости от v0 до V_TERMINAL на дистанции finalThrow
-    const decay_factor = 1.0 - (distanceToWorkzone / finalThrow);
-    const workzoneVelocity = V_TERMINAL + (v0 - V_TERMINAL) * decay_factor;
+    let vx = v0;
     
-    // Расчет радиуса охвата (Расширение струи)
-    const r0 = spec_A / 2000.0; // Начальный радиус (A в мм -> м)
-    const coverageRadius = r0 + distanceToWorkzone * C_EXPANSION;
+    if (dist < coreZone) {
+        // Зона 1: Скорость постоянна на начальном участке
+        vx = v0;
+    } else {
+        // Зона 3: Гиперболическое затухание Vx = (m * V0 * sqrt(Ak)) / x
+        if (dist > 0) {
+            vx = (m * v0 * l0) / dist;
+        }
+    }
+
+    // Ограничиваем, чтобы не уходила в бесконечность и не была меньше подвижности воздуха
+    vx = Math.min(v0, Math.max(0.1, vx));
+
+    // Расчет радиуса (линейное расширение)
+    // r = r0 + x * tan(alpha)
+    const initialRadius = Math.sqrt(spec_A) / 2000.0; 
+    const coverageRadius = initialRadius + dist * 0.2; // 0.2 ~ tan(11.3 градуса)
     
-    return { workzoneVelocity, coverageRadius };
+    return { workzoneVelocity: vx, coverageRadius };
 };
 
 export const calculatePerformance = (modelId: string, flowType: string, diameter: string | number, volume: number): Partial<PerformanceResult> | null => {
@@ -77,13 +97,16 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         throwDist = interpolate(volume, p1.vol, p2.vol, p1.throw, p2.throw);
     }
 
-    // Physics fallback
+    // --- 1. Внедрение коэффициента эффективной площади (Ak) ---
+    // spec.f0 - это живое сечение (м²) из базы данных
+    const Ak = spec.f0; 
+    const v0 = Ak > 0 ? volume / (3600 * Ak) : 0;
+
+    // Physics fallback if throwDist missing from data
     if (throwDist === 0 && flowType === 'suction') {
-         const v0 = volume / (3600 * spec.f0);
          throwDist = Math.sqrt(v0 / 2.0); 
     }
 
-    const v0 = volume / (3600 * spec.f0);
     return { v0, pressure, noise, throwDist, spec };
 };
 
@@ -105,39 +128,55 @@ export const useScientificSimulation = (
             error: 'Типоразмер не производится', 
             spec: SPECS[diameter] || fallbackSpec, 
             v0:0, throwDist:0, pressure:0, noise:0,
-            workzoneVelocity: 0, coverageRadius: 0
+            workzoneVelocity: 0, coverageRadius: 0, Ar: 0
         };
 
         const { v0 = 0, pressure = 0, noise = 0, throwDist = 0, spec } = perf;
 
-        // Добавляем расчет скорости и области захвата в рабочей зоне
+        // Добавляем расчет скорости и области захвата в рабочей зоне (с гиперболическим затуханием)
+        // Для spec.A используется геометрический параметр, для расчета физики используем f0 (Ak) если возможно, или приближаем
+        // В базе A часто сторона или диаметр в мм. Преобразуем f0 (м2) в мм2 для функции
+        const Ak_mm2 = spec.f0 * 1000000; 
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
-            v0, throwDist, spec.A, diffuserHeight, workZoneHeight
+            v0, Ak_mm2, diffuserHeight, workZoneHeight
         );
 
-        // Научный расчет влияния температуры (Архимедова сила)
+        // --- 2. Внедрение числа Архимеда (Ar) ---
+        // Ar = (g * beta * dt * sqrt(Ak)) / v0^2
+        const g = 9.81;
+        const T_ref = 273.15 + roomTemp; // Абсолютная температура (K)
+        const beta = 1 / T_ref;
         const dt = temp - roomTemp;
-        let kArchimedes = 1.0;
+        const l0 = Math.sqrt(spec.f0); // Характерный размер (корень из площади)
+
+        // Защита от деления на ноль
+        const Ar = v0 > 0.1 
+            ? (g * beta * dt * l0) / (v0 * v0) 
+            : 0;
+
+        // Используем Ar для корректировки дальнобойности (throwDist)
+        // Для неизотермических струй: x_noniso = x_iso * k_noniso
+        let k_archimedes = 1.0;
         
         if (flowType.includes('vertical')) {
-             if (dt > 0) {
-                 // Теплый воздух всплывает -> струя гаснет быстрее
-                 kArchimedes = Math.max(0.4, 1.0 - (dt * 0.05));
-             } else {
-                 // Холодный воздух падает -> струя разгоняется
-                 kArchimedes = 1.0 + (Math.abs(dt) * 0.03);
+             if (Math.abs(Ar) > 0.001) {
+                // Если Ar > 0 (нагрев, всплывает) -> струя тормозится быстрее
+                // Если Ar < 0 (охлаждение, падает) -> струя разгоняется
+                k_archimedes = 1.0 - 1.5 * Ar; 
              }
         }
 
-        const finalThrow = throwDist * kArchimedes;
+        const finalThrow = Math.max(0, throwDist * k_archimedes);
+
         return {
             v0: Math.max(0, v0),
             pressure: Math.max(0, pressure),
             noise: Math.max(0, noise),
-            throwDist: Math.max(0, finalThrow),
+            throwDist: finalThrow,
             workzoneVelocity: Math.max(0, workzoneVelocity),
             coverageRadius: Math.max(0, coverageRadius),
             spec,
+            Ar, // Возвращаем Ar для визуализации
             error: null
         };
     }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
