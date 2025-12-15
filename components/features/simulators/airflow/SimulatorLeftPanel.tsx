@@ -13,7 +13,7 @@ export const SimulatorLeftPanel = ({
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
-    onAddDiffuser
+    onAddDiffuser, onDragStart
 }: any) => {
 
     const handleModelChange = (id: string) => {
@@ -108,7 +108,13 @@ export const SimulatorLeftPanel = ({
                             <div className="mb-5">
                                 <div className="grid grid-cols-2 gap-2.5">
                                     {DIFFUSER_CATALOG.map(d => (
-                                        <button key={d.id} onClick={() => handleModelChange(d.id)} className={`p-3.5 rounded-2xl border text-left transition-all group relative overflow-hidden ${params.modelId === d.id ? 'bg-blue-600 border-blue-500/50 text-white shadow-[0_8px_20px_rgba(37,99,235,0.3)]' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}>
+                                        <button 
+                                            key={d.id} 
+                                            draggable={true}
+                                            onDragStart={(e) => onDragStart && onDragStart(e, d.id)}
+                                            onClick={() => handleModelChange(d.id)} 
+                                            className={`p-3.5 rounded-2xl border text-left transition-all group relative overflow-hidden cursor-grab active:cursor-grabbing ${params.modelId === d.id ? 'bg-blue-600 border-blue-500/50 text-white shadow-[0_8px_20px_rgba(37,99,235,0.3)]' : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'}`}
+                                        >
                                             <div className="text-xs font-bold relative z-10">{d.series}</div>
                                             <div className={`text-[10px] truncate relative z-10 mt-0.5 ${params.modelId === d.id ? 'text-blue-100' : 'opacity-50'}`}>{d.name}</div>
                                             {params.modelId === d.id && <div className="absolute right-0 top-0 p-2 opacity-20"><CheckCircle2 size={32}/></div>}

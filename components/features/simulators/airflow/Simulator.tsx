@@ -107,7 +107,7 @@ const Simulator = ({ onBack, onHome }: any) => {
              const fallbackSpec = SPECS[pd.diameter] || { f0: 0, A: 0, B: 0, C: 0, D: 0, min: 0, max: 0 };
              return { v0:0, pressure:0, noise:0, throwDist:0, spec: fallbackSpec, workzoneVelocity:0, coverageRadius:0 };
         }
-        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(perf.v0 || 0, perf.throwDist || 0, perf.spec.A, params.diffuserHeight, params.workZoneHeight);
+        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(perf.v0 || 0, perf.spec.A, params.diffuserHeight, params.workZoneHeight);
         return { ...perf, v0: perf.v0 || 0, pressure: perf.pressure || 0, noise: perf.noise || 0, throwDist: perf.throwDist || 0, workzoneVelocity, coverageRadius, spec: perf.spec };
     };
 
@@ -201,6 +201,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={() => addDiffuserToPlan()}
+                onDragStart={handleDragStart}
             />
 
             {/* --- MAIN CONTENT AREA --- */}

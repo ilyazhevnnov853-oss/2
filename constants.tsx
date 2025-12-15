@@ -126,14 +126,14 @@ export const DIFFUSER_CATALOG: DiffuserModel[] = [
 ];
 
 // Helper components for Wiki - ESTHETICALLY ENHANCED
-const Var = ({c}: {c: string}) => <span className="font-serif italic text-blue-200 font-semibold tracking-wide text-xl">{c}</span>;
-const Num = ({c}: {c: string}) => <span className="font-mono text-emerald-300 font-bold text-lg">{c}</span>;
-const Op = ({c}: {c: string}) => <span className="mx-2 text-slate-400 font-medium opacity-80 text-xl">{c}</span>;
-const Text = ({c}: {c: string}) => <span className="text-slate-300 font-sans mx-1 text-base">{c}</span>;
-const Sub = ({children}: {children: React.ReactNode}) => <sub className="text-xs text-slate-400 ml-0.5">{children}</sub>;
-const Sup = ({children}: {children: React.ReactNode}) => <sup className="text-xs text-slate-400 ml-0.5">{children}</sup>;
+const Var = ({c}: {c: string; children?: React.ReactNode}) => <span className="font-serif italic text-blue-200 font-semibold tracking-wide text-xl">{c}</span>;
+const Num = ({c}: {c: string; children?: React.ReactNode}) => <span className="font-mono text-emerald-300 font-bold text-lg">{c}</span>;
+const Op = ({c}: {c: string; children?: React.ReactNode}) => <span className="mx-2 text-slate-400 font-medium opacity-80 text-xl">{c}</span>;
+const Text = ({c}: {c: string; children?: React.ReactNode}) => <span className="text-slate-300 font-sans mx-1 text-base">{c}</span>;
+const Sub = ({children}: {children?: React.ReactNode}) => <sub className="text-xs text-slate-400 ml-0.5">{children}</sub>;
+const Sup = ({children}: {children?: React.ReactNode}) => <sup className="text-xs text-slate-400 ml-0.5">{children}</sup>;
 
-const Frac = ({num, den}: {num: React.ReactNode, den: React.ReactNode}) => (
+const Frac = ({num, den}: {num: React.ReactNode, den: React.ReactNode, children?: React.ReactNode}) => (
     <div className="inline-flex flex-col items-center align-middle mx-2" style={{verticalAlign: 'middle'}}>
         <div className="border-b-2 border-white/20 px-3 pb-1 mb-1 text-center w-full">{num}</div>
         <div className="px-2 text-center w-full">{den}</div>

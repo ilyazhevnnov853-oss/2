@@ -42,22 +42,17 @@ export const SimulatorRightPanel = ({
                 <div className="space-y-6 animate-in slide-in-from-right-8 duration-500 relative z-10">
                     <div>
                         <SectionHeader icon={<ScanLine size={16}/>} title="Сводка по плану" />
-                        <div className="mt-4 bg-gradient-to-br from-white/5 to-transparent rounded-[24px] p-6 border border-white/5 shadow-inner relative overflow-hidden">
-                                <div className="absolute -top-10 -left-10 w-32 h-32 bg-purple-500/20 rounded-full blur-[40px]"></div>
-                            <div className="flex justify-between items-end mb-6 relative z-10">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Всего устройств</span>
-                                <span className="text-5xl font-black text-white leading-none tracking-tighter">{placedDiffusers.length}</span>
+                        <div className="mt-4 bg-[#13141c] rounded-[24px] p-6 border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] relative overflow-hidden">
+                            <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-500/10 rounded-full blur-[60px]"></div>
+                            
+                            <div className="flex flex-col items-end mb-6 relative z-10">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Всего устройств</span>
+                                <span className="text-7xl font-black text-white leading-none tracking-tighter drop-shadow-xl">{placedDiffusers.length}</span>
                             </div>
                             
-                            <div className="space-y-2 relative z-10">
-                                <div className="bg-black/30 rounded-2xl p-4 flex justify-between items-center border border-white/5 backdrop-blur-md">
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Макс. Шум</span>
-                                    <span className={`font-mono font-black text-sm ${topViewStats.maxNoise > 45 ? 'text-red-400' : 'text-white'}`}>{topViewStats.maxNoise.toFixed(0)} дБ</span>
-                                </div>
-                                <div className="bg-black/30 rounded-2xl p-4 flex justify-between items-center border border-white/5 backdrop-blur-md">
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Т° Смешения</span>
-                                    <span className="font-mono font-black text-sm text-emerald-400">{topViewStats.calcTemp.toFixed(1)} °C</span>
-                                </div>
+                            <div className="space-y-1 relative z-10 border-t border-white/5 pt-2">
+                                <InfoRow label="Макс. Шум" value={topViewStats.maxNoise.toFixed(0)} unit="дБ" alert={topViewStats.maxNoise > 45} />
+                                <InfoRow label="Т° Смешения" value={topViewStats.calcTemp.toFixed(1)} unit="°C" highlight />
                             </div>
                         </div>
                     </div>
