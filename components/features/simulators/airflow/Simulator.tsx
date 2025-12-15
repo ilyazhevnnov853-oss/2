@@ -20,7 +20,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [showHeatmap, setShowHeatmap] = useState(false);
     const [snapToGrid, setSnapToGrid] = useState(false);
     const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
-    const [activeTab, setActiveTab] = useState<'overview' | 'selection'>('overview'); 
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); // New state for mobile stats
     const [openSection, setOpenSection] = useState<string | null>('distributor');
@@ -34,12 +33,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     
     // UI Interaction State
     const [isDragging, setIsDragging] = useState(false);
-
-    // Calculator State
-    const [calcVolume, setCalcVolume] = useState<number | string>(300);
-    const [limitVelocity, setLimitVelocity] = useState<number | string>(5.0);
-    const [limitNoise, setLimitNoise] = useState<number | string>(35);
-    const [calcResults, setCalcResults] = useState<any[]>([]);
 
     // Params
     const [params, setParams] = useState({
@@ -90,11 +83,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [viewMode, selectedDiffuserId, placedDiffusers]);
 
-    // Update diffusers when room params change
-    useEffect(() => {
-        setPlacedDiffusers(prev => prev.map(d => ({ ...d, performance: calculatePlacedDiffuserPerformance(d) })));
-    }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
-
     // --- LOGIC ---
     const toggleSection = (id: string) => setOpenSection(prev => prev === id ? null : id);
     const togglePower = () => { setIsPowerOn(!isPowerOn); setIsPlaying(true); };
@@ -119,9 +107,14 @@ const Simulator = ({ onBack, onHome }: any) => {
              const fallbackSpec = SPECS[pd.diameter] || { f0: 0, A: 0, B: 0, C: 0, D: 0, min: 0, max: 0 };
              return { v0:0, pressure:0, noise:0, throwDist:0, spec: fallbackSpec, workzoneVelocity:0, coverageRadius:0 };
         }
-        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(perf.v0 || 0, perf.spec.A, params.diffuserHeight, params.workZoneHeight, flowType);
+        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(perf.v0 || 0, perf.throwDist || 0, perf.spec.A, params.diffuserHeight, params.workZoneHeight);
         return { ...perf, v0: perf.v0 || 0, pressure: perf.pressure || 0, noise: perf.noise || 0, throwDist: perf.throwDist || 0, workzoneVelocity, coverageRadius, spec: perf.spec };
     };
+
+    // Update diffusers when room params change
+    useEffect(() => {
+        setPlacedDiffusers(prev => prev.map(d => ({ ...d, performance: calculatePlacedDiffuserPerformance(d) })));
+    }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
 
     const addDiffuserToPlan = (xPos?: number, yPos?: number) => {
         if (!sizeSelected || physics.error) return;
@@ -198,7 +191,6 @@ const Simulator = ({ onBack, onHome }: any) => {
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] brightness-100 contrast-150 pointer-events-none"></div>
 
             <SimulatorLeftPanel 
-                activeTab={activeTab} setActiveTab={setActiveTab}
                 openSection={openSection} toggleSection={toggleSection}
                 params={params} setParams={setParams}
                 physics={physics} currentMode={currentMode}
@@ -209,10 +201,6 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={() => addDiffuserToPlan()}
-                calcVolume={calcVolume} setCalcVolume={setCalcVolume}
-                limitVelocity={limitVelocity} setLimitVelocity={setLimitVelocity}
-                limitNoise={limitNoise} setLimitNoise={setLimitNoise}
-                calcResults={calcResults} setCalcResults={setCalcResults}
             />
 
             {/* --- MAIN CONTENT AREA --- */}

@@ -69,9 +69,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
 
     const getGlowColor = (t: number) => {
-        if (t <= 18) return `64, 224, 255`; 
-        if (t >= 28) return `255, 99, 132`;
-        if (t > 18 && t < 28) return `100, 255, 160`;
+        // Цвет зависит от абсолютной температуры
+        if (t <= 18) return `64, 224, 255`; // Cyan for cold
+        if (t >= 28) return `255, 99, 132`; // Red for hot
+        if (t > 18 && t < 28) return `100, 255, 160`; // Green for comfort
         return `255, 255, 255`;
     };
 
@@ -98,10 +99,9 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
 
     useEffect(() => {
         particlesRef.current = [];
-        offscreenCanvasRef.current = null; // Force rebuild of cache
     }, [modelId, flowType, physics.spec?.A, diffuserHeight, viewMode, width, height, roomWidth, roomLength]);
 
-    // --- OPTIMIZATION: Render Static Background to Offscreen Canvas ---
+    // --- OPTIMIZATION: Render Static Background to Offscreen Canvas (TOP VIEW ONLY) ---
     useEffect(() => {
         if (viewMode !== 'top') return;
 
@@ -122,18 +122,16 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         ctx.fillRect(0, 0, width, height);
 
         const { ppm, originX, originY } = getLayout();
-        const roomPixW = roomWidth * ppm;
-        const roomPixL = roomLength * ppm;
 
         // Room Floor
+        const roomPixW = roomWidth * ppm;
+        const roomPixL = roomLength * ppm;
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(originX, originY, roomPixW, roomPixL);
 
-        // Heatmap - BATCH DRAWING FOR PERFORMANCE
+        // Heatmap
         if (showHeatmap && velocityField && velocityField.length > 0 && gridStep) {
             const stepPx = gridStep * ppm;
-            
-            // Use Path2D to batch draw calls by color
             const comfortPath = new Path2D();
             const warningPath = new Path2D();
             const draftPath = new Path2D();
@@ -145,8 +143,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     
                     const x = originX + c * stepPx;
                     const y = originY + r * stepPx;
-                    
-                    // Slightly larger rect to avoid subpixel gaps
                     const drawSize = stepPx + 0.5;
 
                     if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
@@ -155,13 +151,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 }
             }
 
-            // Execute batch fills
             ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
             ctx.fill(comfortPath);
-            
             ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
             ctx.fill(warningPath);
-            
             ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
             ctx.fill(draftPath);
         }
@@ -171,10 +164,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         ctx.lineWidth = 2;
         ctx.strokeRect(originX, originY, roomPixW, roomPixL);
 
-        // Grid (Dual: 10cm / 1m)
+        // Grid
         if (showGrid) {
-            // Minor lines (every 10cm) - ONLY DRAW if step is small enough to see, otherwise just noise
-            // Optimization: Don't draw 10cm lines during heavy drag (coarse grid) to keep FPS high
             if (!gridStep || gridStep < 0.2) {
                 ctx.beginPath();
                 ctx.lineWidth = 0.5;
@@ -196,7 +187,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 ctx.stroke();
             }
 
-            // Major lines (every 1m)
             ctx.beginPath();
             ctx.lineWidth = 1;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; 
@@ -213,7 +203,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             ctx.stroke();
         }
 
-    }, [width, height, roomWidth, roomLength, viewMode, showHeatmap, showGrid, velocityField, gridStep, getLayout]);
+    }, [width, height, roomWidth, roomLength, viewMode, showHeatmap, showGrid, velocityField, gridStep, getLayout, workZoneHeight, roomHeight]);
 
 
     // --- SIDE VIEW PARTICLE LOGIC ---
@@ -240,6 +230,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         let isHorizontal = false;
         let isSuction = false;
 
+        // Buoyancy force (Архимедова сила)
         const buoyancy = -(dtTemp / 293) * 9.81 * ppm * 4.0;
 
         if (flowType === 'suction') {
@@ -304,7 +295,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             x: startX, y: startY, vx, vy, buoyancy, drag, 
             age: 0, life: 2.0 + Math.random() * 1.5,
             lastHistoryTime: 0, 
-            history: [{x: startX, y: startY, age: 0}], 
+            history: [], 
             color: getGlowColor(temp),
             waveFreq, wavePhase: Math.random() * Math.PI * 2, waveAmp, isHorizontal, isSuction
         };
@@ -322,7 +313,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         
         const yPos = (roomHeight - diffuserHeight) * ppm;
         
-        // Pipe
+        // Труба
         ctx.fillStyle = '#334155';
         ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
         
@@ -351,16 +342,16 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         ctx.restore();
     };
 
-    const drawSideGrid = (ctx: CanvasRenderingContext2D, ppm: number) => {
+    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number) => {
         if (!showGrid) return;
         ctx.lineWidth = 1;
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
         const step = 0.5 * ppm;
         
         ctx.beginPath();
-        for (let x = width/2; x < width; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, height); }
-        for (let x = width/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, height); }
-        for (let y = 0; y < height; y += step) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
+        for (let x = w/2; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let x = w/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let y = 0; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
         ctx.stroke();
         
         if (workZoneHeight > 0) {
@@ -370,7 +361,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
             ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
             ctx.lineWidth = 2;
             ctx.moveTo(0, wzY);
-            ctx.lineTo(width, wzY);
+            ctx.lineTo(w, wzY);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
@@ -391,17 +382,30 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
         if (viewMode === 'side') {
             // --- SIDE VIEW RENDER ---
             
-            // Background clearing (trail effect)
             ctx.globalCompositeOperation = 'source-over';
+
+            // PERFORMANCE OPTIMIZATION:
+            // If idle (power off and no particles left), assume static scene.
+            // Draw one last time and STOP THE LOOP to save CPU/GPU.
+            if (!isPowerOn && particlesRef.current.length === 0) {
+                ctx.fillStyle = '#050505';
+                ctx.fillRect(0, 0, width, height);
+                drawSideViewGrid(ctx, width, height, layout.ppm);
+                drawDiffuserSideProfile(ctx, width/2, layout.ppm);
+                return; // Stop requesting animation frame
+            }
+
+            // Normal Animation Loop
+            // Fade out background for trails
             ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
             ctx.fillRect(0, 0, width, height);
             
-            drawSideGrid(ctx, layout.ppm);
+            // Draw Grid every frame (cheap in side view)
+            drawSideViewGrid(ctx, width, height, layout.ppm);
 
             // Simulation
             if (isPowerOn && isPlaying && !physics.error) {
-                // OPTIMIZATION: Reduced max particles from 3500 to 1000
-                const maxParticles = 1000; 
+                const maxParticles = 3500; 
                 const spawnRate = Math.ceil(5 + (physics.v0 || 0) / 2 * 8);
                 
                 if (particlesRef.current.length < maxParticles) {
@@ -448,11 +452,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                         p.vy *= p.drag;
                         p.x += p.vx * dt; p.y += p.vy * dt;
                     }
+
                     if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
                         p.history.push({ x: p.x, y: p.y, age: p.age });
                         p.lastHistoryTime = p.age;
                     }
-                    if (p.history.length > 10) p.history.shift(); // Reduced history for performance
+                    if (p.history.length > 20) p.history.shift();
                 }
 
                 if (p.age > p.life || p.y > height || p.x < 0 || p.x > width || p.y < -100) {
@@ -460,13 +465,20 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                     continue;
                 }
 
-                if (p.history.length > 0) {
+                if (p.history.length > 2) {
                     let alpha = (1 - p.age/p.life) * 0.5;
                     ctx.strokeStyle = `rgba(${p.color}, ${alpha})`; 
                     ctx.beginPath();
-                    ctx.moveTo(p.x, p.y);
+                    const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
+                    const wx = (p.isHorizontal && !p.isSuction) ? 0 : waveVal;
+                    const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
+                    ctx.moveTo(p.x + wx, p.y + wy);
                     for (let j = p.history.length - 1; j >= 0; j--) {
-                        ctx.lineTo(p.history[j].x, p.history[j].y);
+                        const h = p.history[j];
+                        const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
+                        const hwx = (p.isHorizontal && !p.isSuction) ? 0 : hWave;
+                        const hwy = (p.isHorizontal && !p.isSuction) ? hWave : 0;
+                        ctx.lineTo(h.x + hwx, h.y + hwy);
                     }
                     ctx.stroke();
                 }
@@ -494,8 +506,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                 const cx = originX + d.x * ppm;
                 const cy = originY + d.y * ppm;
                 
-                // Draw Coverage Area (Physics-based) - Optional in top view on top of heatmap?
-                // Keeping circles but making them subtle if heatmap is on
+                // Draw Coverage Area (Physics-based)
                 if (!showHeatmap) {
                     const rPx = d.performance.coverageRadius * ppm;
                     const v = d.performance.workzoneVelocity;
@@ -754,6 +765,14 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = ({
                         <Trash2 size={14} />
                         <span>Удалить</span>
                     </button>
+                </div>
+            )}
+            {physics.error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
+                    <div className="flex flex-col items-center gap-4 p-8 border border-red-500/30 bg-red-500/5 rounded-3xl text-red-200">
+                        <span className="font-bold text-xl tracking-tight">ТИПОРАЗМЕР НЕДОСТУПЕН</span>
+                        <span className="text-sm opacity-70">Для выбранной модели нет данных для этого размера</span>
+                    </div>
                 </div>
             )}
         </div>

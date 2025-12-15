@@ -47,21 +47,21 @@ const App = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-7xl animate-in zoom-in-95 duration-700 pb-20 md:pb-0">
             <LauncherCard 
                 onClick={() => setLauncherSection('simulators')}
-                icon={<Wind size={40} md:size={48} strokeWidth={1.5} />}
+                icon={<Wind className="w-10 h-10 md:w-12 md:h-12" strokeWidth={1.5} />}
                 title="СИМУЛЯТОР"
                 desc="Визуализация физики потоков"
                 color="blue"
             />
             <LauncherCard 
                 onClick={() => setLauncherSection('calculations')}
-                icon={<Calculator size={40} md:size={48} strokeWidth={1.5} />}
+                icon={<Calculator className="w-10 h-10 md:w-12 md:h-12" strokeWidth={1.5} />}
                 title="РАСЧЕТЫ"
                 desc="Инженерные калькуляторы"
                 color="emerald"
             />
             <LauncherCard 
                 onClick={() => setLauncherSection('reference')}
-                icon={<BookOpen size={40} md:size={48} strokeWidth={1.5} />}
+                icon={<BookOpen className="w-10 h-10 md:w-12 md:h-12" strokeWidth={1.5} />}
                 title="ЗНАНИЯ"
                 desc="Нормы, формулы и теория"
                 color="amber"
