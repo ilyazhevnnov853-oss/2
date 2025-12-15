@@ -6,13 +6,21 @@ const CONSTANTS = {
   DEFAULT_ROOM_HEIGHT: 3.5,
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 3500,
+  MAX_PARTICLES: 2000, // Reduced from 3500 for better mobile performance
   SPAWN_RATE_BASE: 5,
   SPAWN_RATE_MULTIPLIER: 8
 };
 
 // --- HELPER FUNCTIONS ---
-const getGlowColor = (t: number) => {
+const getGlowColor = (t: number, theme: 'light' | 'dark') => {
+    // In light mode, use darker, more saturated colors for better visibility
+    if (theme === 'light') {
+        if (t <= 18) return `0, 160, 220`; // Deep Cyan/Blue
+        if (t >= 28) return `220, 40, 80`; // Deep Red
+        if (t > 18 && t < 28) return `20, 180, 100`; // Deep Green
+        return `80, 80, 80`; // Dark Gray default
+    }
+    // Dark mode neon colors
     if (t <= 18) return `64, 224, 255`; 
     if (t >= 28) return `255, 99, 132`; 
     if (t > 18 && t < 28) return `100, 255, 160`; 
@@ -87,6 +95,7 @@ interface DiffuserCanvasProps {
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
+  theme?: 'light' | 'dark';
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -135,7 +144,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 prevProps.roomLength !== props.roomLength ||
                 prevProps.showHeatmap !== props.showHeatmap ||
                 prevProps.showGrid !== props.showGrid ||
-                prevProps.velocityField !== props.velocityField 
+                prevProps.velocityField !== props.velocityField ||
+                prevProps.theme !== props.theme
             )
         ) {
             isOffscreenDirty.current = true;
@@ -150,7 +160,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
 
     // --- REUSE PARTICLE LOGIC ---
     const spawnParticle = (p: Particle, state: DiffuserCanvasProps, ppm: number) => {
-        const { physics, temp, flowType, modelId, width, height, roomHeight, diffuserHeight } = state;
+        const { physics, temp, flowType, modelId, width, height, roomHeight, diffuserHeight, theme } = state;
         
         if (physics.error) return;
         const spec = physics.spec;
@@ -193,7 +203,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             drag = 1.0; waveAmp = 0;
             // Setup particle for suction
             p.x = startX; p.y = spawnY; p.vx = vx; p.vy = vy; p.buoyancy = 0; 
-            p.drag = drag; p.age = 0; p.life = 3.0; p.color = '150, 150, 150';
+            p.drag = drag; p.age = 0; p.life = 3.0; p.color = theme === 'light' ? '100, 100, 100' : '150, 150, 150';
             p.waveFreq = waveFreq; p.wavePhase = 0; p.waveAmp = waveAmp;
             p.isHorizontal = isHorizontal; p.isSuction = isSuction;
         } else {
@@ -243,7 +253,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             p.x = startX; p.y = startY; p.vx = vx; p.vy = vy; 
             p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
             p.life = 2.0 + Math.random() * 1.5;
-            p.color = getGlowColor(temp);
+            p.color = getGlowColor(temp, theme || 'dark');
             p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
             p.isHorizontal = isHorizontal; p.isSuction = isSuction;
         }
@@ -256,6 +266,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
     const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number, state: DiffuserCanvasProps) => {
         const spec = state.physics.spec;
         if (!spec || !spec.A) return;
+        const theme = state.theme || 'dark';
 
         const scale = ppm / 1000;
         const wA = spec.A * scale;
@@ -264,16 +275,16 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         const hTotal = hD + hC;
         const yPos = (state.roomHeight - state.diffuserHeight) * ppm;
         
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = theme === 'light' ? '#CBD5E1' : '#334155'; // Slate-300 vs Slate-700
         ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
         
         ctx.save();
         ctx.translate(0, yPos);
-        ctx.fillStyle = '#475569';
+        ctx.fillStyle = theme === 'light' ? '#94A3B8' : '#475569';
         ctx.beginPath();
         ctx.rect(cx - wA/2, 0, wA, hD); ctx.fill();
         
-        ctx.fillStyle = '#94a3b8';
+        ctx.fillStyle = theme === 'light' ? '#64748B' : '#94a3b8';
         ctx.beginPath();
         ctx.moveTo(cx - wA/2, hD);
         
@@ -292,8 +303,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
 
     const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: DiffuserCanvasProps) => {
         if (!state.showGrid) return;
+        const theme = state.theme || 'dark';
+        
         ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.strokeStyle = theme === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)';
         const step = 0.5 * ppm;
         
         ctx.beginPath();
@@ -306,13 +319,13 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             const wzY = (state.roomHeight - state.workZoneHeight) * ppm;
             ctx.beginPath();
             ctx.setLineDash([10, 5]);
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
+            ctx.strokeStyle = theme === 'light' ? 'rgba(234, 179, 8, 0.6)' : 'rgba(255, 200, 0, 0.4)';
             ctx.lineWidth = 2;
             ctx.moveTo(0, wzY);
             ctx.lineTo(w, wzY);
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
+            ctx.fillStyle = theme === 'light' ? 'rgba(234, 179, 8, 0.8)' : 'rgba(255, 200, 0, 0.6)';
             ctx.font = 'bold 10px Inter';
             ctx.fillText(`РАБОЧАЯ ЗОНА (${state.workZoneHeight}м)`, 10, wzY - 5);
         }
@@ -330,8 +343,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         const ctx = cvs.getContext('2d', { alpha: false });
         if (!ctx) return;
 
+        const theme = state.theme || 'dark';
+
         // Clear with Theme Background
-        ctx.fillStyle = '#050505'; 
+        ctx.fillStyle = theme === 'light' ? '#FFFFFF' : '#030304'; 
         ctx.fillRect(0, 0, state.width, state.height);
 
         const { ppm, originX, originY } = getLayout(state.width, state.height, state.roomWidth || 6, state.roomLength || 6, state.roomHeight, 'top');
@@ -339,14 +354,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         const roomPixW = (state.roomWidth || 6) * ppm;
         const roomPixL = (state.roomLength || 6) * ppm;
         
-        ctx.fillStyle = '#0f172a'; // Room Floor
+        ctx.fillStyle = theme === 'light' ? '#F1F5F9' : '#0f172a'; // Room Floor
         ctx.fillRect(originX, originY, roomPixW, roomPixL);
 
-        // Heatmap
-        // Ensure gridStep is defined and defaults to 0.1 if missing
-        const gStep = state.gridStep || 0.1;
-        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0) {
-            const stepPx = gStep * ppm;
+        // Heatmap logic preserved (colors need slight tuning for light mode opacity if needed, but standard RGBA usually works OK on light too)
+        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0 && state.gridStep) {
+            const stepPx = state.gridStep * ppm;
             const comfortPath = new Path2D();
             const warningPath = new Path2D();
             const draftPath = new Path2D();
@@ -354,12 +367,10 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             for (let r = 0; r < state.velocityField.length; r++) {
                 for (let c = 0; c < state.velocityField[r].length; c++) {
                     const v = state.velocityField[r][c];
-                    // Lower threshold to visualize lower velocities
-                    if (v < 0.05) continue; 
+                    if (v < 0.1) continue;
                     
                     const x = originX + c * stepPx;
                     const y = originY + r * stepPx;
-                    // Slightly overlap rects to avoid grid lines
                     const drawSize = stepPx + 0.5;
 
                     if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
@@ -368,15 +379,15 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 }
             }
 
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.3)'; // Increased opacity
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
             ctx.fill(comfortPath);
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.4)';
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
             ctx.fill(warningPath);
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
             ctx.fill(draftPath);
         }
 
-        ctx.strokeStyle = '#334155';
+        ctx.strokeStyle = theme === 'light' ? '#CBD5E1' : '#334155';
         ctx.lineWidth = 2;
         ctx.strokeRect(originX, originY, roomPixW, roomPixL);
 
@@ -388,7 +399,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             if (gStep < 0.2) {
                 ctx.beginPath();
                 ctx.lineWidth = 0.5;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+                ctx.strokeStyle = theme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255, 255, 255, 0.03)';
                 for (let x = 0; x <= rw; x += 0.1) {
                     if (Math.abs(x % 1) > 0.01) { 
                         const px = x * ppm;
@@ -408,7 +419,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
 
             ctx.beginPath();
             ctx.lineWidth = 1;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'; 
+            ctx.strokeStyle = theme === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(255, 255, 255, 0.12)'; 
             for (let x = 0; x <= rw; x += 1) {
                 const px = x * ppm;
                 ctx.moveTo(originX + px, originY);
@@ -435,13 +446,25 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
         // READ LATEST STATE FROM REF
         const state = simulationRef.current;
         const { width, height, isPowerOn, isPlaying, viewMode } = state;
+        const theme = state.theme || 'dark';
         
         const dt = CONSTANTS.BASE_TIME_STEP;
         const layout = getLayout(width, height, state.roomWidth || 6, state.roomLength || 6, state.roomHeight, viewMode || 'side');
 
         if (viewMode === 'side') {
             // SIDE VIEW LOGIC
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; // Trail effect
+            
+            // If simulation is OFF, simply clear the canvas (removes expensive trail effect)
+            if (!isPowerOn) {
+                 ctx.clearRect(0, 0, width, height);
+                 drawSideViewGrid(ctx, width, height, layout.ppm, state);
+                 drawDiffuserSideProfile(ctx, width/2, layout.ppm, state);
+                 requestRef.current = requestAnimationFrame(animate);
+                 return;
+            }
+
+            // Trail effect (only when ON)
+            ctx.fillStyle = theme === 'light' ? 'rgba(255,255,255,0.2)' : 'rgba(5, 5, 5, 0.2)'; 
             ctx.fillRect(0, 0, width, height);
             
             drawSideViewGrid(ctx, width, height, layout.ppm, state);
@@ -450,11 +473,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             
             // 1. UPDATE AND SPAWN
             if (isPowerOn && isPlaying && !state.physics.error) {
-                // Spawn new
                 const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
                 let spawnedCount = 0;
-                
-                // Linear scan is fast enough for 3500 items in JS engine optimization
                 for (let i = 0; i < pool.length; i++) {
                     if (!pool[i].active) {
                         spawnParticle(pool[i], state, layout.ppm);
@@ -464,8 +484,12 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 }
             }
 
-            // 2. UPDATE PHYSICS (Same as before)
+            // 2. UPDATE PHYSICS & BATCHING
+            // We group particles by style key to minimize state changes
             const maxH = height;
+            const batches: Record<string, Particle[]> = {};
+            const QUANTIZE = 10; // Number of alpha levels
+
             for (let i = 0; i < pool.length; i++) {
                 const p = pool[i];
                 if (!p.active) continue;
@@ -511,23 +535,38 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                         p.lastHistoryTime = p.age;
                     }
                 }
+
+                // Add to Batch
+                if (p.history.length > 1) {
+                    const rawAlpha = (1 - p.age/p.life) * 0.5;
+                    // Quantize alpha to reduce draw calls
+                    const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
+                    if (alpha <= 0) continue;
+
+                    const key = `${p.color}|${alpha}`;
+                    if (!batches[key]) batches[key] = [];
+                    batches[key].push(p);
+                }
             }
 
-            // 3. DRAW PARTICLES
-            ctx.globalCompositeOperation = 'screen';
+            // 3. DRAW BATCHES
+            // Dramatically reduces draw calls from 2000 to ~20-40 per frame
+            ctx.globalCompositeOperation = theme === 'light' ? 'multiply' : 'screen';
             ctx.lineWidth = 1; 
             ctx.lineCap = 'round';
 
-            for (let i = 0; i < pool.length; i++) {
-                const p = pool[i];
-                if (!p.active) continue;
-                if (p.history.length > 2) {
-                    let alpha = (1 - p.age/p.life) * 0.5;
-                    ctx.strokeStyle = `rgba(${p.color}, ${alpha})`; 
-                    ctx.beginPath();
+            for (const key in batches) {
+                const [color, alphaStr] = key.split('|');
+                ctx.strokeStyle = `rgba(${color}, ${alphaStr})`;
+                ctx.beginPath();
+                
+                const particles = batches[key];
+                for (let k = 0; k < particles.length; k++) {
+                    const p = particles[k];
                     const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
                     const wx = (p.isHorizontal && !p.isSuction) ? 0 : waveVal;
                     const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
+                    
                     ctx.moveTo(p.x + wx, p.y + wy);
                     
                     for (let j = p.history.length - 1; j >= 0; j--) {
@@ -537,8 +576,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                         const hwy = (p.isHorizontal && !p.isSuction) ? hWave : 0;
                         ctx.lineTo(h.x + hwx, h.y + hwy);
                     }
-                    ctx.stroke();
                 }
+                ctx.stroke();
             }
 
             ctx.globalCompositeOperation = 'source-over';
@@ -556,7 +595,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             if (offscreenCanvasRef.current) {
                 ctx.drawImage(offscreenCanvasRef.current, 0, 0);
             } else {
-                ctx.fillStyle = '#050505';
+                ctx.fillStyle = theme === 'light' ? '#FFFFFF' : '#030304';
                 ctx.fillRect(0, 0, width, height);
             }
 
@@ -600,11 +639,11 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 // Highlight Selection
                 if (state.selectedDiffuserId === d.id) {
                     ctx.fillStyle = '#3b82f6'; 
-                    ctx.strokeStyle = '#fff';
+                    ctx.strokeStyle = theme === 'light' ? '#1e293b' : '#fff';
                     ctx.lineWidth = 2;
                 } else {
-                    ctx.fillStyle = '#475569'; 
-                    ctx.strokeStyle = '#94a3b8';
+                    ctx.fillStyle = theme === 'light' ? '#94a3b8' : '#475569'; 
+                    ctx.strokeStyle = theme === 'light' ? '#cbd5e1' : '#94a3b8';
                     ctx.lineWidth = 1;
                 }
                 
@@ -799,30 +838,30 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             />
             {contextMenu && (
                 <div 
-                    className="fixed z-50 bg-[#1a1b26] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-1.5 flex flex-col min-w-[160px] animate-in zoom-in-95 duration-200 origin-top-left backdrop-blur-xl"
+                    className="fixed z-50 bg-white/90 dark:bg-[#1a1b26] border border-black/5 dark:border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-1.5 flex flex-col min-w-[160px] animate-in zoom-in-95 duration-200 origin-top-left backdrop-blur-xl"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                 >
-                    <div className="px-3 py-2 border-b border-white/5 mb-1 flex justify-between items-center">
+                    <div className="px-3 py-2 border-b border-black/5 dark:border-white/5 mb-1 flex justify-between items-center">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Действия</span>
-                        <button onClick={() => setContextMenu(null)} className="text-slate-500 hover:text-white transition-colors"><X size={12}/></button>
+                        <button onClick={() => setContextMenu(null)} className="text-slate-500 hover:text-black dark:hover:text-white transition-colors"><X size={12}/></button>
                     </div>
-                    <button onClick={() => handleContextAction('move')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
-                        <Move size={14} className="text-blue-400" />
+                    <button onClick={() => handleContextAction('move')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors text-left">
+                        <Move size={14} className="text-blue-500 dark:text-blue-400" />
                         <span>Переместить</span>
                     </button>
-                    <button onClick={() => handleContextAction('duplicate')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
-                        <Copy size={14} className="text-emerald-400" />
+                    <button onClick={() => handleContextAction('duplicate')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-colors text-left">
+                        <Copy size={14} className="text-emerald-500 dark:text-emerald-400" />
                         <span>Дублировать</span>
                     </button>
-                    <button onClick={() => handleContextAction('delete')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors text-left">
+                    <button onClick={() => handleContextAction('delete')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-red-500 dark:text-red-300 hover:bg-red-500/10 dark:hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-200 transition-colors text-left">
                         <Trash2 size={14} />
                         <span>Удалить</span>
                     </button>
                 </div>
             )}
             {props.physics.error && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
-                    <div className="flex flex-col items-center gap-4 p-8 border border-red-500/30 bg-red-500/5 rounded-3xl text-red-200">
+                <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-black/80 backdrop-blur-sm z-20">
+                    <div className="flex flex-col items-center gap-4 p-8 border border-red-500/30 bg-red-500/5 rounded-3xl text-red-600 dark:text-red-200">
                         <span className="font-bold text-xl tracking-tight">ТИПОРАЗМЕР НЕДОСТУПЕН</span>
                         <span className="text-sm opacity-70">Для выбранной модели нет данных для этого размера</span>
                     </div>

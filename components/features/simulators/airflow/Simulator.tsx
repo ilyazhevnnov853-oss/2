@@ -9,9 +9,11 @@ import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import { PlacedDiffuser, PerformanceResult } from '../../../../types';
+import { useTheme } from '../../../../context/ThemeContext'; // Import theme hook
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
+    const { theme } = useTheme(); // Get current theme
     const [viewSize, setViewSize] = useState({ w: 800, h: 600 });
     const containerRef = useRef<HTMLDivElement>(null);
     const [isPowerOn, setIsPowerOn] = useState(false);
@@ -52,7 +54,9 @@ const Simulator = ({ onBack, onHome }: any) => {
             window.requestAnimationFrame(() => {
                 if (!Array.isArray(entries) || !entries.length) return;
                 const { width, height } = entries[0].contentRect;
-                setViewSize({ w: width * 2, h: height * 2 }); 
+                // Optimization: Use Device Pixel Ratio but limit to 2x to save GPU load on mobile/Retina
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                setViewSize({ w: width * dpr, h: height * dpr }); 
             });
         });
         obs.observe(containerRef.current);
@@ -162,7 +166,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     };
 
     return (
-        <div className="flex w-full h-[100dvh] bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-200 overflow-hidden">
+        <div className="flex w-full h-[100dvh] bg-[#F5F5F7] dark:bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-500">
              {/* AMBIENT BACKGROUND */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
@@ -184,14 +188,14 @@ const Simulator = ({ onBack, onHome }: any) => {
             {/* --- MAIN CONTENT AREA --- */}
             <div className="flex-1 flex flex-col relative h-full overflow-hidden p-0 lg:p-4 lg:pl-0">
                 {/* CANVAS */}
-                <div ref={containerRef} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-[#030304] border-b lg:border border-white/5 ring-1 ring-white/5 group">
+                <div ref={containerRef} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-white dark:bg-[#030304] border-b lg:border border-black/5 dark:border-white/5 ring-1 ring-black/5 dark:ring-white/5 group transition-colors duration-500">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
-                    <div className="absolute inset-0 bg-gradient-to-b from-blue-900/5 to-transparent pointer-events-none"></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 dark:from-blue-900/5 to-transparent pointer-events-none"></div>
                     
                     {/* Top Bar for Mobile */}
                     <div className="lg:hidden absolute top-4 left-4 right-4 z-30 flex justify-between items-center pointer-events-none">
                         <button onClick={() => setIsMobileMenuOpen(true)} className="pointer-events-auto p-3 rounded-full bg-blue-600 text-white shadow-lg shadow-blue-500/30 active:scale-95 transition-transform"><Menu size={20} /></button>
-                        <button onClick={() => setIsMobileStatsOpen(true)} className="pointer-events-auto p-3 rounded-full bg-white/10 backdrop-blur-md text-white border border-white/10 active:scale-95 transition-transform"><Info size={20} /></button>
+                        <button onClick={() => setIsMobileStatsOpen(true)} className="pointer-events-auto p-3 rounded-full bg-white/10 backdrop-blur-md text-slate-800 dark:text-white border border-white/10 active:scale-95 transition-transform"><Info size={20} /></button>
                     </div>
                     
                     <DiffuserCanvas 
@@ -208,23 +212,24 @@ const Simulator = ({ onBack, onHome }: any) => {
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
+                        theme={theme}
                     />
                 </div>
                 
-                 {/* FLOATING "ISLAND" BAR (Controls) */}
+                 {/* FLOATING "ISLAND" BAR (Controls) - RESTORED */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
-                    <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-[#0f1014]/90 backdrop-blur-2xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-                         <button onClick={() => setViewMode('side')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
-                        <button onClick={() => setViewMode('top')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
-                        <div className="w-px h-6 bg-white/10 mx-1"></div>
-                        <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-white/10 text-white' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                    <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-white/80 dark:bg-[#0f1014]/90 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
+                         <button onClick={() => setViewMode('side')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
+                        <button onClick={() => setViewMode('top')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
+                        <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
+                        <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
                         {viewMode === 'top' && (
                             <>
-                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-300' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
-                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-400' : 'text-slate-500 hover:text-white hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
+                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
+                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
                             </>
                         )}
-                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-white hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={18} /></button>
+                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={18} /></button>
                     </div>
                 </div>
             </div>
