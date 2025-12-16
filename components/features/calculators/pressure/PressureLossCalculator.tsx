@@ -105,12 +105,12 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                     <div className="p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative pt-safe-top">
                          <div className="flex justify-between items-center lg:hidden mb-4">
                             <h2 className="text-lg font-bold text-white">Меню</h2>
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
+                            <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white" aria-label="Закрыть меню"><X size={20} /></button>
                         </div>
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную" aria-label="На главную">
                                     <Home size={18} />
                                 </button>
                                 <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
@@ -134,12 +134,14 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                         <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
                             <button 
                                 onClick={() => setShape('round')}
+                                aria-pressed={shape === 'round'}
                                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${shape === 'round' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-slate-500 hover:text-white'}`}
                             >
                                 <CircleDot size={14} /> Круглый
                             </button>
                             <button 
                                 onClick={() => setShape('rect')}
+                                aria-pressed={shape === 'rect'}
                                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${shape === 'rect' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'text-slate-500 hover:text-white'}`}
                             >
                                 <Box size={14} /> Прямоуг.
@@ -163,6 +165,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 value={airflow} 
                                                 onChange={(e) => setAirflow(Math.max(0, Number(e.target.value)))} 
                                                 className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                aria-label="Расход воздуха"
                                             />
                                             <span className="text-[10px] font-bold text-slate-500">м³/ч</span>
                                         </div>
@@ -173,6 +176,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-purple-600 to-indigo-500"
                                         icon={<Wind size={14}/>}
                                         label=""
+                                        ariaLabel="Расход воздуха"
                                     />
                                 </div>
 
@@ -187,6 +191,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                     value={diameter} 
                                                     onChange={(e) => setDiameter(Math.max(10, Number(e.target.value)))} 
                                                     className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                    aria-label="Диаметр воздуховода"
                                                 />
                                                 <span className="text-[10px] font-bold text-slate-500">мм</span>
                                             </div>
@@ -197,6 +202,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                             gradient="from-indigo-500 to-purple-500"
                                             icon={<CircleDot size={14}/>}
                                             label=""
+                                            ariaLabel="Диаметр воздуховода"
                                         />
                                     </div>
                                 ) : (
@@ -211,6 +217,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 gradient="from-indigo-500 to-blue-500"
                                                 icon={<Ruler size={14}/>}
                                                 label=""
+                                                ariaLabel="Ширина воздуховода"
                                             />
                                         </div>
                                         <div>
@@ -223,6 +230,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 gradient="from-indigo-500 to-blue-500"
                                                 icon={<Ruler size={14} className="rotate-90"/>}
                                                 label=""
+                                                ariaLabel="Высота воздуховода"
                                             />
                                         </div>
                                     </div>
@@ -246,6 +254,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-blue-500 to-indigo-500"
                                         icon={<Ruler size={14}/>}
                                         label=""
+                                        ariaLabel="Длина участка"
                                     />
                                 </div>
 
@@ -264,6 +273,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-purple-500 to-pink-500"
                                         icon={<Activity size={14}/>}
                                         label=""
+                                        ariaLabel="Сумма коэффициентов местных сопротивлений"
                                     />
                                 </div>
                             </div>
@@ -279,7 +289,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                     <div className={`absolute inset-0 bg-gradient-to-b from-purple-900/10 to-transparent pointer-events-none transition-colors duration-700`}></div>
 
                     {/* Mobile Toggle */}
-                    <button onClick={() => setIsMobileMenuOpen(true)} className={`lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-purple-600 text-white shadow-lg pt-safe-top mt-2`}>
+                    <button onClick={() => setIsMobileMenuOpen(true)} className={`lg:hidden absolute top-4 left-4 z-30 p-3 rounded-full bg-purple-600 text-white shadow-lg pt-safe-top mt-2`} aria-label="Открыть меню параметров">
                         <Menu size={20} />
                     </button>
 
