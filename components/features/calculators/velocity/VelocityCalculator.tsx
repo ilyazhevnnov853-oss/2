@@ -84,10 +84,10 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную" aria-label="На главную">
                                     <Home size={18} />
                                 </button>
-                                <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад" aria-label="Назад">
                                     <ChevronLeft size={18} />
                                 </button>
                             </div>
@@ -138,6 +138,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                                 value={volume} 
                                                 onChange={(e) => setVolume(Math.max(0, Number(e.target.value)))} 
                                                 className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-emerald-500/50 transition-colors"
+                                                aria-label="Air Volume"
                                             />
                                             <span className="text-[10px] font-bold text-slate-500">м³/ч</span>
                                         </div>
@@ -148,6 +149,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-emerald-600 via-teal-500 to-cyan-400"
                                         icon={<Wind size={14}/>}
                                         label=""
+                                        ariaLabel="Air Volume Slider"
                                     />
                                 </div>
                                 
@@ -160,7 +162,8 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                                     type="number" 
                                                     value={minSpeed} 
                                                     onChange={(e) => setMinSpeed(Number(e.target.value))} 
-                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
+                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none"
+                                                    aria-label="Minimum Speed"
                                                 />
                                                 <span className="text-[10px] text-slate-600">м/с</span>
                                             </div>
@@ -172,7 +175,8 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                                     type="number" 
                                                     value={maxSpeed} 
                                                     onChange={(e) => setMaxSpeed(Number(e.target.value))} 
-                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none" 
+                                                    className="bg-transparent w-full text-sm font-bold font-mono text-white outline-none"
+                                                    aria-label="Maximum Speed"
                                                 />
                                                 <span className="text-[10px] text-slate-600">м/с</span>
                                             </div>
@@ -195,6 +199,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                                             gradient="from-teal-500 to-emerald-400"
                                             icon={<Wind size={14}/>}
                                             label=""
+                                            ariaLabel="Speed Limit Slider"
                                         />
                                         <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                                             <div className="flex items-center gap-2 mb-1 text-emerald-400">
