@@ -1,10 +1,9 @@
 import React from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, ArrowUpFromLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft, Eye, Grid, Layers, Download, GripHorizontal, Sun, Moon } from 'lucide-react';
+import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, ArrowUpFromLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft, Eye, Grid, Layers, Download, GripHorizontal } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
 import { GlassButton, GlassSlider } from '../../../ui/Shared';
 import { AccordionItem } from './SimulatorUI';
-import { useTheme } from '../../../../context/ThemeContext';
 
 export const SimulatorLeftPanel = ({ 
     openSection, toggleSection, 
@@ -16,7 +15,6 @@ export const SimulatorLeftPanel = ({
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
     onAddDiffuser
 }: any) => {
-    const { theme, toggleTheme } = useTheme();
 
     const handleModelChange = (id: string) => {
         const validDiameter = Object.keys(SPECS).find(d => {
@@ -84,9 +82,6 @@ export const SimulatorLeftPanel = ({
                                             <ChevronLeft size={18} />
                                          </button>
                                      )}
-                                     <button onClick={toggleTheme} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-amber-500 dark:text-blue-400">
-                                        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-                                    </button>
                                 </div>
 
                                 <div className="h-8 w-px bg-black/10 dark:bg-white/10 hidden lg:block"></div>

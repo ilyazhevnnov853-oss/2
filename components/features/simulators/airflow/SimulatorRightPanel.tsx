@@ -10,7 +10,7 @@ export const SimulatorRightPanel = ({
 
     const Content = () => (
         <>
-            {viewMode === 'side' ? (
+            {viewMode !== 'top' ? (
                 <div className="space-y-6 animate-in slide-in-from-right-8 duration-500 relative z-10">
                         <div>
                         <SectionHeader icon={<Maximize size={16}/>} title="Результаты" />
@@ -69,17 +69,6 @@ export const SimulatorRightPanel = ({
                                 label="Ср. Скорость" 
                                 value={coverageAnalysis.avgVelocity.toFixed(2)} unit="м/с" 
                             />
-                        </div>
-                        <div className="mt-4 bg-black/20 rounded-[24px] p-5 border border-white/5">
-                                <div className="flex justify-between text-[9px] uppercase text-slate-500 font-bold mb-3 tracking-wider">
-                                <span>Комфорт</span>
-                                <span>Сквозняк</span>
-                            </div>
-                            <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex shadow-inner ring-1 ring-white/5">
-                                <div className="bg-emerald-500 h-full transition-all duration-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{width: `${(coverageAnalysis.comfortZones / (coverageAnalysis.totalCoverage || 1)) * 100}%`}}></div>
-                                <div className="bg-amber-500 h-full transition-all duration-500" style={{width: `${(coverageAnalysis.warningZones / (coverageAnalysis.totalCoverage || 1)) * 100}%`}}></div>
-                                <div className="bg-red-500 h-full transition-all duration-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{width: `${(coverageAnalysis.draftZones / (coverageAnalysis.totalCoverage || 1)) * 100}%`}}></div>
-                            </div>
                         </div>
                     </div>
                 </div>

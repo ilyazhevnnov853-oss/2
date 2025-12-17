@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge, CloudRain, Thermometer, Flame, ScrollText, Shapes, ArrowRightLeft } from 'lucide-react';
-import { ThemeProvider } from './context/ThemeContext';
 import Simulator from './components/features/simulators/airflow/Simulator';
 import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
 import HeaterCalculator from './components/features/calculators/heater/HeaterCalculator';
@@ -273,9 +272,7 @@ const AppContent = () => {
 };
 
 const App = () => (
-    <ThemeProvider>
-        <AppContent />
-    </ThemeProvider>
+    <AppContent />
 );
 
 export default App;

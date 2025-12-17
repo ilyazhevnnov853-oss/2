@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
@@ -9,11 +9,9 @@ import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import { PlacedDiffuser, PerformanceResult } from '../../../../types';
-import { useTheme } from '../../../../context/ThemeContext'; // Import theme hook
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
-    const { theme } = useTheme(); // Get current theme
     const [viewSize, setViewSize] = useState({ w: 800, h: 600 });
     const containerRef = useRef<HTMLDivElement>(null);
     const [isPowerOn, setIsPowerOn] = useState(false);
@@ -21,7 +19,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [showGrid, setShowGrid] = useState(true);
     const [showHeatmap, setShowHeatmap] = useState(false);
     const [snapToGrid, setSnapToGrid] = useState(false);
-    const [viewMode, setViewMode] = useState<'side' | 'top'>('side');
+    const [viewMode, setViewMode] = useState<'side' | 'top' | '3d'>('side');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
     const [openSection, setOpenSection] = useState<string | null>('distributor');
@@ -212,15 +210,16 @@ const Simulator = ({ onBack, onHome }: any) => {
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
-                        theme={theme}
                     />
                 </div>
                 
-                 {/* FLOATING "ISLAND" BAR (Controls) - RESTORED */}
+                 {/* FLOATING "ISLAND" BAR (Controls) */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
                     <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-white/80 dark:bg-[#0f1014]/90 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-                         <button onClick={() => setViewMode('side')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
-                        <button onClick={() => setViewMode('top')} className={`px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
+                         <button onClick={() => setViewMode('side')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
+                        <button onClick={() => setViewMode('top')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
+                        <button onClick={() => setViewMode('3d')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === '3d' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Box size={16}/><span>3D</span></button>
+                        
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
                         <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
                         {viewMode === 'top' && (
