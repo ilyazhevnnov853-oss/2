@@ -1,154 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { PerformanceResult } from '../../../../../types';
-
-const CONSTANTS = {
-  BASE_TIME_STEP: 1/60, 
-  HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 2000, 
-  SPAWN_RATE_BASE: 5,
-  SPAWN_RATE_MULTIPLIER: 8
-};
-
-// --- TYPES ---
-interface Particle3D {
-    active: boolean;
-    x: number; y: number; z: number;
-    vx: number; vy: number; vz: number;
-    buoyancy: number; 
-    drag: number; 
-    age: number; 
-    life: number; 
-    lastHistoryTime: number; 
-    history: {x: number, y: number, z: number, age: number}[]; 
-    color: string; 
-    waveFreq: number; 
-    wavePhase: number; 
-    waveAmp: number;
-    isSuction: boolean;
-}
-
-interface ThreeDViewCanvasProps {
-  width: number; 
-  height: number;
-  physics: PerformanceResult;
-  isPowerOn: boolean; 
-  isPlaying: boolean;
-  temp: number; 
-  roomTemp: number;
-  flowType: string; 
-  modelId: string;
-  roomHeight: number; 
-  roomWidth: number;
-  roomLength: number;
-  diffuserHeight: number;
-  workZoneHeight: number;
-}
-
-// 3D Projection Helper
-const project = (
-    x: number, y: number, z: number, 
-    w: number, h: number, 
-    rotX: number, rotY: number, 
-    scale: number,
-    panX: number, panY: number
-) => {
-    // 1. Rotate Y (Azimuth)
-    const cx = Math.cos(rotY);
-    const sx = Math.sin(rotY);
-    const x1 = x * cx - z * sx;
-    const z1 = z * cx + x * sx;
-
-    // 2. Rotate X (Elevation)
-    const cy = Math.cos(rotX);
-    const sy = Math.sin(rotX);
-    const y2 = y * cy - z1 * sy;
-    const z2 = z1 * cy + y * sy;
-
-    // 3. Perspective
-    const fov = 1000;
-    const cameraDist = 1500; 
-    
-    const depth = cameraDist + z2;
-    if (depth < 10) return { x: -10000, y: -10000, s: 0, z: z2 }; // Clipped
-
-    const factor = (fov / depth) * scale;
-
-    return {
-        x: w / 2 + panX + x1 * factor,
-        y: h / 2 + panY + y2 * factor, 
-        s: factor,
-        z: z2 
-    };
-};
-
-const getGlowColor = (t: number) => {
-    if (t <= 18) return `64, 224, 255`; 
-    if (t >= 28) return `255, 99, 132`; 
-    if (t > 18 && t < 28) return `100, 255, 160`; 
-    return `255, 255, 255`;
-};
-
-// --- VIEW CUBE COMPONENT ---
-const ViewCube = ({ rotX, rotY, setCamera }: { rotX: number, rotY: number, setCamera: any }) => {
-    const size = 60; // px
-    const offset = size / 2;
-    
-    // Invert Y rotation to match CSS coordinate system with Canvas projection
-    const rX = rotX * (180 / Math.PI);
-    const rY = -rotY * (180 / Math.PI);
-
-    const faceStyle = "absolute inset-0 flex items-center justify-center border border-slate-300/50 bg-white/90 backdrop-blur-md text-[9px] font-extrabold text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer select-none uppercase tracking-wider shadow-[inset_0_0_10px_rgba(0,0,0,0.05)]";
-
-    const snap = (rx: number, ry: number) => (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setCamera((prev: any) => ({ ...prev, rotX: rx, rotY: ry }));
-    };
-
-    return (
-        <div className="absolute top-6 right-6 w-[60px] h-[60px] z-50 group" style={{ perspective: '300px' }}>
-            {/* Compass Ring */}
-            <div className="absolute inset-[-10px] rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            
-            <div 
-                className="relative w-full h-full transform-3d transition-transform duration-100 ease-linear"
-                style={{ 
-                    transformStyle: 'preserve-3d', 
-                    transform: `rotateX(${rX}deg) rotateY(${rY}deg)`
-                }}
-            >
-                {/* FRONT (0, 0) */}
-                <div className={faceStyle} style={{ transform: `translateZ(${offset}px)` }} onClick={snap(0, 0)}>
-                    ПЕРЕД
-                </div>
-
-                {/* BACK (0, PI) */}
-                <div className={faceStyle} style={{ transform: `rotateY(180deg) translateZ(${offset}px)` }} onClick={snap(0, Math.PI)}>
-                    ТЫЛ
-                </div>
-
-                {/* RIGHT (0, -PI/2) */}
-                <div className={faceStyle} style={{ transform: `rotateY(90deg) translateZ(${offset}px)` }} onClick={snap(0, -Math.PI/2)}>
-                    ПРАВО
-                </div>
-
-                {/* LEFT (0, PI/2) */}
-                <div className={faceStyle} style={{ transform: `rotateY(-90deg) translateZ(${offset}px)` }} onClick={snap(0, Math.PI/2)}>
-                    ЛЕВО
-                </div>
-
-                {/* TOP (PI/2, 0) */}
-                <div className={faceStyle} style={{ transform: `rotateX(90deg) translateZ(${offset}px)` }} onClick={snap(Math.PI/2, 0)}>
-                    ВЕРХ
-                </div>
-
-                {/* BOTTOM (-PI/2, 0) */}
-                <div className={faceStyle} style={{ transform: `rotateX(-90deg) translateZ(${offset}px)` }} onClick={snap(-Math.PI/2, 0)}>
-                    НИЗ
-                </div>
-            </div>
-        </div>
-    );
-};
+import { CONSTANTS, Particle3D, ThreeDViewCanvasProps, project, spawnParticle } from '../utils/airflow3DLogic';
+import ViewCube from './ViewCube';
 
 const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -158,7 +10,7 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     
     // Camera State
     const [camera, setCamera] = useState({ 
-        rotX: 0.3, 
+        rotX: 0.5, 
         rotY: -0.6, 
         panX: 0, 
         panY: 0, 
@@ -190,134 +42,6 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
 
     // Sync Props
     useEffect(() => { simulationRef.current = props; }, [props]);
-
-    // --- PHYSICS SPAWN LOGIC ---
-    const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: number) => {
-        const { physics, temp, flowType, modelId, roomHeight, diffuserHeight } = state;
-        
-        if (physics.error) return;
-        const spec = physics.spec;
-        if (!spec || !spec.A) return;
-        
-        const nozzleW = (spec.A / 1000) * PPM;
-        const startY = (diffuserHeight * PPM); 
-        
-        const pxSpeed = (physics.v0 || 0) * PPM * 0.8;
-
-        let startX = 0, startZ = 0;
-        let vx = 0, vy = 0, vz = 0;
-        let drag = 0.96;
-        let waveAmp = 5;
-        let waveFreq = 4 + Math.random() * 4;
-        let isSuction = false;
-
-        const physicsAr = physics.Ar || 0; 
-        const visualGain = 50.0; 
-        const buoyancy = physicsAr * (physics.v0 * physics.v0) * PPM * visualGain;
-
-        if (flowType === 'suction') {
-            isSuction = true;
-            startX = (Math.random() - 0.5) * state.roomWidth * PPM;
-            startZ = (Math.random() - 0.5) * state.roomLength * PPM;
-            const spawnH = Math.random() * startY;
-            
-            p.x = startX; p.y = spawnH; p.z = startZ;
-            
-            const dx = 0 - startX;
-            const dy = startY - spawnH;
-            const dz = 0 - startZ;
-            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            const force = ((physics.v0 || 0) * 500) / (dist + 10);
-            
-            p.vx = (dx / dist) * force;
-            p.vy = (dy / dist) * force;
-            p.vz = (dz / dist) * force;
-            
-            drag = 1.0; waveAmp = 0;
-            p.life = 3.0; 
-            p.color = '150, 150, 150';
-        } else {
-            let angle = Math.random() * Math.PI * 2; 
-            let radSpeed = 0;
-            let vertSpeed = 0;
-
-            if (flowType.includes('horizontal') || flowType === '4-way') {
-                if (flowType === '4-way') {
-                    const quad = Math.floor(Math.random() * 4);
-                    const baseAngle = quad * (Math.PI / 2);
-                    const spread = (Math.random() - 0.5) * 0.2; 
-                    angle = baseAngle + spread;
-                    radSpeed = pxSpeed * 1.0;
-                    vertSpeed = -pxSpeed * 0.1;
-                } else {
-                    radSpeed = pxSpeed * 1.2;
-                    vertSpeed = -pxSpeed * 0.2;
-                }
-                
-                startX = Math.cos(angle) * (nozzleW * 0.55);
-                startZ = Math.sin(angle) * (nozzleW * 0.55);
-                
-                if (flowType.includes('swirl')) { 
-                    waveAmp = 15; waveFreq = 8; 
-                } else { 
-                    waveAmp = 3; 
-                }
-
-            } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
-                const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
-                const speed = pxSpeed;
-                radSpeed = Math.sin(coneAngle) * speed;
-                vertSpeed = -Math.cos(coneAngle) * speed;
-                waveAmp = 5; drag = 0.95;
-
-            } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
-                const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180);
-                startX = (Math.random() - 0.5) * nozzleW * 0.95; 
-                startZ = (Math.random() - 0.5) * nozzleW * 0.95;
-                const rSpd = Math.sin(spreadAngle) * pxSpeed * 0.8; 
-                radSpeed = Math.abs(rSpd);
-                vertSpeed = -Math.cos(spreadAngle) * pxSpeed;
-                waveAmp = 8; drag = 0.96;
-
-            } else if (flowType === 'vertical-swirl') {
-                startX = (Math.random() - 0.5) * nozzleW * 0.9;
-                startZ = (Math.random() - 0.5) * nozzleW * 0.9;
-                const spread = (Math.random() - 0.5) * 1.5;
-                radSpeed = Math.sin(spread) * pxSpeed * 0.5;
-                vertSpeed = -Math.cos(spread) * pxSpeed;
-                waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
-            } else {
-                startX = (Math.random() - 0.5) * nozzleW * 0.95;
-                startZ = (Math.random() - 0.5) * nozzleW * 0.95;
-                const spread = (Math.random() - 0.5) * 0.05;
-                radSpeed = Math.sin(spread) * pxSpeed * 0.3;
-                vertSpeed = -Math.cos(spread) * pxSpeed * 1.3;
-                waveAmp = 1; drag = 0.985;
-            }
-
-            vx = Math.cos(angle) * radSpeed;
-            vz = Math.sin(angle) * radSpeed;
-            vy = vertSpeed;
-
-            if (flowType.includes('swirl')) {
-                const swirlSpeed = pxSpeed * 0.5;
-                vx += -Math.sin(angle) * swirlSpeed;
-                vz += Math.cos(angle) * swirlSpeed;
-            }
-
-            p.x = startX; p.y = startY; p.z = startZ;
-            p.life = 2.0 + Math.random() * 1.5;
-            p.color = getGlowColor(temp);
-        }
-
-        p.vx = vx; p.vy = vy; p.vz = vz;
-        p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
-        p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
-        p.isSuction = isSuction;
-        p.active = true;
-        p.lastHistoryTime = 0;
-        p.history.length = 0; 
-    };
 
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.stopPropagation();
@@ -565,21 +289,23 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     }, [animate]);
 
     return (
-        <div className="relative w-full h-full">
+        <div 
+            className="relative w-full h-full cursor-move"
+            onMouseDown={handleStart}
+            onMouseMove={handleMove}
+            onMouseUp={handleEnd}
+            onMouseLeave={handleEnd}
+            onWheel={handleWheel}
+            onTouchStart={handleStart}
+            onTouchMove={handleMove}
+            onTouchEnd={handleEnd}
+        >
             <ViewCube rotX={camera.rotX} rotY={camera.rotY} setCamera={setCamera} />
             <canvas 
                 ref={canvasRef} 
                 width={props.width} 
                 height={props.height} 
-                className="block w-full h-full cursor-move touch-none"
-                onMouseDown={handleStart}
-                onMouseMove={handleMove}
-                onMouseUp={handleEnd}
-                onMouseLeave={handleEnd}
-                onWheel={handleWheel}
-                onTouchStart={handleStart}
-                onTouchMove={handleMove}
-                onTouchEnd={handleEnd}
+                className="block w-full h-full pointer-events-none"
             />
         </div>
     );
