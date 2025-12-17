@@ -16,6 +16,12 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         panY: 0, 
         zoom: 1.0 
     });
+
+    // Target Camera for Smooth Tweening
+    const targetCamera = useRef({ 
+        rotX: 0.5, 
+        rotY: -0.6 
+    });
     
     const isDragging = useRef(false);
     const isPanning = useRef(false);
@@ -43,6 +49,18 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     // Sync Props
     useEffect(() => { simulationRef.current = props; }, [props]);
 
+    // Handle ViewCube Rotation Changes
+    const handleViewChange = useCallback((rx: number, ry: number, smooth: boolean) => {
+        if (smooth) {
+            // Update target for lerping
+            targetCamera.current = { rotX: rx, rotY: ry };
+        } else {
+            // Instant update (for dragging)
+            setCamera(prev => ({ ...prev, rotX: rx, rotY: ry }));
+            targetCamera.current = { rotX: rx, rotY: ry };
+        }
+    }, []);
+
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.stopPropagation();
         const delta = -Math.sign(e.deltaY) * 0.1;
@@ -59,6 +77,10 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
             if ((e as React.MouseEvent).button === 1 || (e as React.MouseEvent).shiftKey) isPanning.current = true;
             else isDragging.current = true;
         }
+        
+        // Sync target on drag start to prevent jumping
+        targetCamera.current = { rotX: camera.rotX, rotY: camera.rotY };
+        
         lastMouse.current = { x: clientX, y: clientY };
     };
 
@@ -74,11 +96,12 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         const dy = clientY - lastMouse.current.y;
         
         if (isDragging.current) {
-            setCamera(prev => ({
-                ...prev,
-                rotY: prev.rotY + dx * 0.005,
-                rotX: Math.max(-1.5, Math.min(1.5, prev.rotX + dy * 0.005))
-            }));
+            const newRotY = camera.rotY + dx * 0.005;
+            const newRotX = Math.max(-1.5, Math.min(1.5, camera.rotX + dy * 0.005));
+            
+            // Update both to keep them in sync during drag
+            setCamera(prev => ({ ...prev, rotY: newRotY, rotX: newRotX }));
+            targetCamera.current = { rotX: newRotX, rotY: newRotY };
         } else if (isPanning.current) {
             setCamera(prev => ({
                 ...prev,
@@ -96,6 +119,27 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         if (!canvas) return;
         const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) return;
+
+        // --- CAMERA INTERPOLATION (LERP) ---
+        if (!isDragging.current) {
+            const lerpFactor = 0.1;
+            
+            // Normalize angles for shortest path interpolation
+            let diffY = targetCamera.current.rotY - camera.rotY;
+            // Wrap diffY to -PI to +PI
+            while (diffY < -Math.PI) diffY += 2 * Math.PI;
+            while (diffY > Math.PI) diffY -= 2 * Math.PI;
+
+            const diffX = targetCamera.current.rotX - camera.rotX;
+
+            if (Math.abs(diffX) > 0.001 || Math.abs(diffY) > 0.001) {
+                setCamera(prev => ({
+                    ...prev,
+                    rotX: prev.rotX + diffX * lerpFactor,
+                    rotY: prev.rotY + diffY * lerpFactor
+                }));
+            }
+        }
 
         const state = simulationRef.current;
         const { width, height, isPowerOn, isPlaying, roomHeight, roomWidth, roomLength, diffuserHeight, workZoneHeight } = state;
@@ -124,154 +168,191 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         const p3d = (x: number, y: number, z: number) => 
             project(x, -(y + yOffset), z, width, height, camera.rotX, camera.rotY, finalScale, camera.panX, camera.panY);
 
-        // --- DRAW ROOM ---
-        if (isPowerOn) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            ctx.lineWidth = 1;
-            const corners = [
-                {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2},
-                {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}
+        // --- DRAW ROOM (Always visible) ---
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        const corners = [
+            {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2},
+            {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}
+        ].map(v => p3d(v.x, v.y, v.z));
+
+        ctx.beginPath();
+        [0,4].forEach(start => {
+            ctx.moveTo(corners[start].x, corners[start].y);
+            ctx.lineTo(corners[start+1].x, corners[start+1].y);
+            ctx.lineTo(corners[start+2].x, corners[start+2].y);
+            ctx.lineTo(corners[start+3].x, corners[start+3].y);
+            ctx.closePath();
+        });
+        [0,1,2,3].forEach(i => {
+            ctx.moveTo(corners[i].x, corners[i].y);
+            ctx.lineTo(corners[i+4].x, corners[i+4].y);
+        });
+        ctx.stroke();
+
+        if (workZoneHeight > 0) {
+            const wy = workZoneHeight * PPM;
+            const wc = [
+                {x: -rw/2, y: wy, z: -rl/2}, {x: rw/2, y: wy, z: -rl/2},
+                {x: rw/2, y: wy, z: rl/2}, {x: -rw/2, y: wy, z: rl/2}
             ].map(v => p3d(v.x, v.y, v.z));
-
+            
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
+            ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
             ctx.beginPath();
-            [0,4].forEach(start => {
-                ctx.moveTo(corners[start].x, corners[start].y);
-                ctx.lineTo(corners[start+1].x, corners[start+1].y);
-                ctx.lineTo(corners[start+2].x, corners[start+2].y);
-                ctx.lineTo(corners[start+3].x, corners[start+3].y);
-                ctx.closePath();
-            });
-            [0,1,2,3].forEach(i => {
-                ctx.moveTo(corners[i].x, corners[i].y);
-                ctx.lineTo(corners[i+4].x, corners[i+4].y);
-            });
-            ctx.stroke();
+            ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
 
-            if (workZoneHeight > 0) {
-                const wy = workZoneHeight * PPM;
-                const wc = [
-                    {x: -rw/2, y: wy, z: -rl/2}, {x: rw/2, y: wy, z: -rl/2},
-                    {x: rw/2, y: wy, z: rl/2}, {x: -rw/2, y: wy, z: rl/2}
-                ].map(v => p3d(v.x, v.y, v.z));
-                
-                ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
-                ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+        // Draw Diffuser Marker (Always visible)
+        const diffP = p3d(0, diffY, 0);
+        if (diffP.s > 0) {
+            ctx.beginPath();
+            ctx.fillStyle = isPowerOn ? '#3b82f6' : '#64748b';
+            const r = 0.15 * PPM * finalScale; // Visual radius
+            ctx.arc(diffP.x, diffP.y, Math.max(3, r), 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Stem to ceiling if suspended
+            if (diffuserHeight < roomHeight) {
+                const ceilP = p3d(0, rh, 0);
                 ctx.beginPath();
-                ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
-                ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                ctx.moveTo(diffP.x, diffP.y);
+                ctx.lineTo(ceilP.x, ceilP.y);
+                ctx.stroke();
             }
         }
 
+        // --- PARTICLES (Only when Power ON) ---
         const pool = particlesRef.current;
         const dt = CONSTANTS.BASE_TIME_STEP;
 
-        if (isPowerOn && isPlaying && !state.physics.error) {
-            const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
-            let spawnedCount = 0;
-            for (let i = 0; i < pool.length; i++) {
-                if (!pool[i].active) {
-                    spawnParticle(pool[i], state, PPM);
-                    spawnedCount++;
-                    if (spawnedCount >= spawnRate) break;
-                }
-            }
-        }
-
-        const batches: Record<string, Particle3D[]> = {};
-        const QUANTIZE = 10;
-
-        for (let i = 0; i < pool.length; i++) {
-            const p = pool[i];
-            if (!p.active) continue;
-
-            if (isPowerOn && isPlaying) {
-                p.age += dt;
-                
-                if (p.age > p.life || p.y < 0 || p.y > rh || Math.abs(p.x) > rw/2 || Math.abs(p.z) > rl/2) {
-                    p.active = false;
-                    continue;
-                }
-
-                if (p.isSuction) {
-                    const dx = 0 - p.x;
-                    const dy = diffY - p.y;
-                    const dz = 0 - p.z;
-                    const dSq = dx*dx + dy*dy + dz*dz;
-                    const dist = Math.sqrt(dSq);
-                    if (dist < 20) { p.active = false; continue; }
-                    const force = ((state.physics.v0 || 0) * 2000) / (dSq + 100);
-                    p.vx += (dx/dist)*force*dt;
-                    p.vy += (dy/dist)*force*dt;
-                    p.vz += (dz/dist)*force*dt;
-                    p.x += p.vx; p.y += p.vy; p.z += p.vz;
-                } else {
-                    p.vy += p.buoyancy * dt; 
-                    p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
-                    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-                }
-
-                if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
-                    if (p.history.length > 20) p.history.shift();
-                    p.history.push({ x: p.x, y: p.y, z: p.z, age: p.age });
-                    p.lastHistoryTime = p.age;
-                }
-            }
-
-            if (p.history.length > 1) {
-                const rawAlpha = (1 - p.age/p.life) * 0.5;
-                const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
-                if (alpha <= 0) continue;
-                const key = `${p.color}|${alpha}`;
-                if (!batches[key]) batches[key] = [];
-                batches[key].push(p);
-            }
-        }
-
-        ctx.globalCompositeOperation = 'screen';
-        ctx.lineCap = 'round';
-
-        for (const key in batches) {
-            const [color, alphaStr] = key.split('|');
-            ctx.strokeStyle = `rgba(${color}, ${alphaStr})`;
-            ctx.lineWidth = 1.5; 
-            ctx.beginPath();
-
-            const group = batches[key];
-            for (let k = 0; k < group.length; k++) {
-                const p = group[k];
-                const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
-                
-                let wx = 0, wy = 0, wz = 0;
-                if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
-                    wx = waveVal * Math.cos(p.wavePhase); 
-                    wz = waveVal * Math.sin(p.wavePhase);
-                } else {
-                    wy = waveVal;
-                }
-                if (p.isSuction) { wx=0; wy=0; wz=0; }
-
-                const cur = p3d(p.x + wx, p.y + wy, p.z + wz);
-                if (cur.s <= 0) continue;
-
-                ctx.moveTo(cur.x, cur.y);
-
-                for (let j = p.history.length - 1; j >= 0; j--) {
-                    const h = p.history[j];
-                    const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
-                    let hwx = 0, hwy = 0, hwz = 0;
-                    if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
-                        hwx = hWave * Math.cos(p.wavePhase);
-                        hwz = hWave * Math.sin(p.wavePhase);
-                    } else {
-                        hwy = hWave;
+        if (isPowerOn) {
+            if (isPlaying && !state.physics.error) {
+                const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+                let spawnedCount = 0;
+                for (let i = 0; i < pool.length; i++) {
+                    if (!pool[i].active) {
+                        spawnParticle(pool[i], state, PPM);
+                        spawnedCount++;
+                        if (spawnedCount >= spawnRate) break;
                     }
-                    if (p.isSuction) { hwx=0; hwy=0; hwz=0; }
-
-                    const prev = p3d(h.x + hwx, h.y + hwy, h.z + hwz);
-                    ctx.lineTo(prev.x, prev.y);
                 }
             }
-            ctx.stroke();
+
+            const batches: Record<string, Particle3D[]> = {};
+            const QUANTIZE = 10;
+            const throwLimit = state.physics.throwDist || 50;
+
+            for (let i = 0; i < pool.length; i++) {
+                const p = pool[i];
+                if (!p.active) continue;
+
+                if (isPlaying) {
+                    p.age += dt;
+                    
+                    // Check physical distance from diffuser origin
+                    const dx = p.x;
+                    const dy = diffY - p.y;
+                    const dz = p.z;
+                    const distFromOrigin = Math.sqrt(dx*dx + dy*dy + dz*dz) / PPM;
+
+                    if (distFromOrigin > throwLimit || p.age > p.life || p.y < 0 || p.y > rh || Math.abs(p.x) > rw/2 || Math.abs(p.z) > rl/2) {
+                        p.active = false;
+                        continue;
+                    }
+
+                    if (p.isSuction) {
+                        const dxS = 0 - p.x;
+                        const dyS = diffY - p.y;
+                        const dzS = 0 - p.z;
+                        const dSq = dxS*dxS + dyS*dyS + dzS*dzS;
+                        const dist = Math.sqrt(dSq);
+                        if (dist < 20) { p.active = false; continue; }
+                        const force = ((state.physics.v0 || 0) * 2000) / (dSq + 100);
+                        p.vx += (dxS/dist)*force*dt;
+                        p.vy += (dyS/dist)*force*dt;
+                        p.vz += (dzS/dist)*force*dt;
+                        p.x += p.vx; p.y += p.vy; p.z += p.vz;
+                    } else {
+                        p.vy += p.buoyancy * dt; 
+                        p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
+                        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+                    }
+
+                    if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
+                        if (p.history.length > 20) p.history.shift();
+                        p.history.push({ x: p.x, y: p.y, z: p.z, age: p.age });
+                        p.lastHistoryTime = p.age;
+                    }
+                }
+
+                if (p.history.length > 1) {
+                    // Fade out near end of throw distance
+                    const dx = p.x;
+                    const dy = diffY - p.y;
+                    const dz = p.z;
+                    const currentDist = Math.sqrt(dx*dx + dy*dy + dz*dz) / PPM;
+                    const distFactor = Math.max(0, 1 - (currentDist / throwLimit));
+                    
+                    const rawAlpha = Math.min(distFactor, (1 - p.age/p.life)) * 0.5;
+                    const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
+                    
+                    if (alpha <= 0) continue;
+                    const key = `${p.color}|${alpha}`;
+                    if (!batches[key]) batches[key] = [];
+                    batches[key].push(p);
+                }
+            }
+
+            ctx.globalCompositeOperation = 'screen';
+            ctx.lineCap = 'round';
+
+            for (const key in batches) {
+                const [color, alphaStr] = key.split('|');
+                ctx.strokeStyle = `rgba(${color}, ${alphaStr})`;
+                ctx.lineWidth = 1.5; 
+                ctx.beginPath();
+
+                const group = batches[key];
+                for (let k = 0; k < group.length; k++) {
+                    const p = group[k];
+                    const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
+                    
+                    let wx = 0, wy = 0, wz = 0;
+                    if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
+                        wx = waveVal * Math.cos(p.wavePhase); 
+                        wz = waveVal * Math.sin(p.wavePhase);
+                    } else {
+                        wy = waveVal;
+                    }
+                    if (p.isSuction) { wx=0; wy=0; wz=0; }
+
+                    const cur = p3d(p.x + wx, p.y + wy, p.z + wz);
+                    if (cur.s <= 0) continue;
+
+                    ctx.moveTo(cur.x, cur.y);
+
+                    for (let j = p.history.length - 1; j >= 0; j--) {
+                        const h = p.history[j];
+                        const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
+                        let hwx = 0, hwy = 0, hwz = 0;
+                        if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
+                            hwx = hWave * Math.cos(p.wavePhase);
+                            hwz = hWave * Math.sin(p.wavePhase);
+                        } else {
+                            hwy = hWave;
+                        }
+                        if (p.isSuction) { hwx=0; hwy=0; hwz=0; }
+
+                        const prev = p3d(h.x + hwx, h.y + hwy, h.z + hwz);
+                        ctx.lineTo(prev.x, prev.y);
+                    }
+                }
+                ctx.stroke();
+            }
         }
 
         ctx.globalCompositeOperation = 'source-over';
@@ -300,7 +381,7 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
             onTouchMove={handleMove}
             onTouchEnd={handleEnd}
         >
-            <ViewCube rotX={camera.rotX} rotY={camera.rotY} setCamera={setCamera} />
+            <ViewCube rotX={camera.rotX} rotY={camera.rotY} onViewChange={handleViewChange} />
             <canvas 
                 ref={canvasRef} 
                 width={props.width} 

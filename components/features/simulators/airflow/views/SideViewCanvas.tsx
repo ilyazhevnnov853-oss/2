@@ -173,7 +173,8 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 waveAmp = 1; drag = 0.985;
             }
 
-            p.life = 2.0 + Math.random() * 1.5;
+            // Extended life so distance clipping works
+            p.life = 10.0 + Math.random() * 2.0;
             p.color = getGlowColor(temp);
         }
 
@@ -259,10 +260,11 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         if (!ctx) return;
 
         const state = simulationRef.current;
-        const { width, height, isPowerOn, isPlaying, roomHeight } = state;
+        const { width, height, isPowerOn, isPlaying, roomHeight, diffuserHeight } = state;
         
         const dt = CONSTANTS.BASE_TIME_STEP;
         const { ppm } = getSideLayout(width, height, roomHeight);
+        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
 
         // If simulation is OFF, simply clear the canvas
         if (!isPowerOn) {
@@ -301,6 +303,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         const maxH = height;
         const batches: Record<string, Particle[]> = {};
         const QUANTIZE = 10;
+        const throwLimit = state.physics.throwDist || 50;
 
         for (let i = 0; i < pool.length; i++) {
             const p = pool[i];
@@ -308,14 +311,20 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
             if (isPowerOn && isPlaying) {
                 p.age += dt;
-                if (p.age > p.life || p.y > maxH || p.x < 0 || p.x > width || p.y < -100) {
+                
+                // Calculate physical distance from diffuser origin
+                // Origin X is center (width/2), Origin Y is diffuserYPos
+                const distPx = Math.sqrt(Math.pow(p.x - width/2, 2) + Math.pow(p.y - diffuserYPos, 2));
+                const distMeters = distPx / ppm;
+
+                if (distMeters > throwLimit || p.age > p.life || p.y > maxH || p.x < 0 || p.x > width || p.y < -100) {
                     p.active = false;
                     continue;
                 }
 
                 if (p.isSuction) {
                     const targetX = width / 2;
-                    const targetY = (state.roomHeight - state.diffuserHeight) * ppm;
+                    const targetY = diffuserYPos;
                     const dx = targetX - p.x;
                     const dy = targetY - p.y;
                     const distSq = dx*dx + dy*dy;
@@ -350,7 +359,12 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
             // Add to Batch
             if (p.history.length > 1) {
-                const rawAlpha = (1 - p.age/p.life) * 0.5;
+                // Fade out near end of throw distance
+                const distPx = Math.sqrt(Math.pow(p.x - width/2, 2) + Math.pow(p.y - diffuserYPos, 2));
+                const currentDist = distPx / ppm;
+                const distFactor = Math.max(0, 1 - (currentDist / throwLimit));
+
+                const rawAlpha = Math.min(distFactor, (1 - p.age/p.life)) * 0.5;
                 const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
                 if (alpha <= 0) continue;
 

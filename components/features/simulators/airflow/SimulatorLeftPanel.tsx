@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, ArrowUpFromLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft, Eye, Grid, Layers, Download, GripHorizontal } from 'lucide-react';
+import { Fan, ScanLine, Wind, Thermometer, Home, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
 import { GlassButton, GlassSlider } from '../../../ui/Shared';
@@ -44,13 +44,6 @@ export const SimulatorLeftPanel = ({
         }
         setParams(p => ({ ...p, diameter: d, volume: newVol }));
         setSizeSelected(true);
-    };
-
-    const toggleCeilingMount = () => {
-        setParams(p => ({
-            ...p, isCeilingMounted: !p.isCeilingMounted,
-            diffuserHeight: !p.isCeilingMounted ? p.roomHeight : p.diffuserHeight
-        }));
     };
 
     return (
@@ -141,41 +134,50 @@ export const SimulatorLeftPanel = ({
                         </AccordionItem>
 
                         <AccordionItem title="Помещение" icon={<ScanLine size={18}/>} isOpen={openSection === 'room'} onClick={() => toggleSection('room')}>
-                            <div className="grid grid-cols-2 gap-3 mb-6">
-                                {['roomWidth', 'roomLength', 'roomHeight', 'workZoneHeight'].map(key => (
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                {['roomWidth', 'roomLength', 'roomHeight'].map(key => (
                                     <div key={key} className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/20 transition-colors focus-within:border-blue-500/50 group">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1.5 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
                                             {key === 'roomWidth' && 'Ширина'}
                                             {key === 'roomLength' && 'Длина'}
-                                            {key === 'roomHeight' && 'Высота'}
-                                            {key === 'workZoneHeight' && 'Раб. Зона'} (м)
+                                            {key === 'roomHeight' && 'Высота'} (м)
                                         </label>
-                                        <input type="number" step="0.5" value={(params as any)[key]} onChange={(e) => setParams(p => ({...p, [key]: Number(e.target.value)}))} className="bg-transparent w-full text-sm font-bold font-mono text-slate-900 dark:text-white outline-none" />
+                                        <input 
+                                            type="number" 
+                                            step="0.5" 
+                                            value={(params as any)[key]} 
+                                            onChange={(e) => {
+                                                const val = Number(e.target.value);
+                                                setParams(p => {
+                                                    const updates: any = { [key]: val };
+                                                    // Sync diffuser height with room height automatically
+                                                    if (key === 'roomHeight') updates.diffuserHeight = val;
+                                                    return { ...p, ...updates };
+                                                });
+                                            }} 
+                                            className="bg-transparent w-full text-sm font-bold font-mono text-slate-900 dark:text-white outline-none" 
+                                        />
                                     </div>
                                 ))}
                             </div>
-                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))} color="temp"/>
-                            <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/5">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"><ArrowUpFromLine size={16}/></div>
-                                        <div>
-                                            <div className="text-[10px] font-bold uppercase text-slate-500">Тип монтажа</div>
-                                            <div className="text-xs font-bold text-slate-900 dark:text-white tracking-wide">{params.isCeilingMounted ? 'Потолочный' : 'Свободный'}</div>
-                                        </div>
-                                    </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" className="sr-only peer" checked={params.isCeilingMounted} onChange={toggleCeilingMount} />
-                                        <div className="w-12 h-7 bg-black/10 dark:bg-black/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
-                                    </label>
-                                </div>
-                                <div className={`transition-all duration-300 overflow-hidden ${!params.isCeilingMounted ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    <div className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 flex items-center justify-between">
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Высота установки</span>
-                                        <div className="flex items-center gap-2"><input type="number" step="0.1" value={params.diffuserHeight} onChange={(e) => setParams(p => ({...p, diffuserHeight: Number(e.target.value)}))} className="bg-transparent w-16 text-right text-sm font-bold font-mono text-slate-900 dark:text-white outline-none"/><span className="text-[10px] font-bold text-slate-600">м</span></div>
-                                    </div>
+
+                            {/* WORK ZONE TOGGLE */}
+                            <div className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 mb-6">
+                                <label className="text-[9px] font-bold text-slate-500 uppercase block mb-2">Высота рабочей зоны</label>
+                                <div className="flex bg-white/5 p-1 rounded-xl">
+                                    {[1.5, 2.0].map(h => (
+                                        <button
+                                            key={h}
+                                            onClick={() => setParams((p:any) => ({...p, workZoneHeight: h}))}
+                                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${params.workZoneHeight === h ? 'bg-white dark:bg-slate-600 text-black dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                        >
+                                            {h.toFixed(1)} м
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
+
+                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))} color="temp"/>
                         </AccordionItem>
                     </div>
 

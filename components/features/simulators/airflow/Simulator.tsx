@@ -36,7 +36,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     // Params
     const [params, setParams] = useState({
         diameter: 160 as string | number, volume: 250, temperature: 20, roomTemp: 24, modelId: 'dpu-v', modeIdx: 0,
-        roomHeight: 3.5, roomWidth: 6.0, roomLength: 6.0, diffuserHeight: 3.5, isCeilingMounted: true, workZoneHeight: 1.8
+        roomHeight: 3.5, roomWidth: 6.0, roomLength: 6.0, diffuserHeight: 3.5, isCeilingMounted: true, workZoneHeight: 1.5
     });
     const [sizeSelected, setSizeSelected] = useState(true);
 

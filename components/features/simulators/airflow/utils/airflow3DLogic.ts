@@ -199,7 +199,8 @@ export const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: 
         }
 
         p.x = startX; p.y = startY; p.z = startZ;
-        p.life = 2.0 + Math.random() * 1.5;
+        // Give particles enough life so the distance check (throwDist) clips them instead of time
+        p.life = 10.0 + Math.random() * 2.0;
         p.color = getGlowColor(temp);
     }
 

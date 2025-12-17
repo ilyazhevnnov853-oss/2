@@ -1,30 +1,38 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
-// --- REVIT-STYLE VIEW CUBE ---
-const ViewCube = ({ rotX, rotY, setCamera }: { rotX: number, rotY: number, setCamera: any }) => {
+interface ViewCubeProps {
+    rotX: number;
+    rotY: number;
+    onViewChange: (rx: number, ry: number, smooth: boolean) => void;
+}
+
+const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
     const [isDragging, setIsDragging] = useState(false);
     const cubeRef = useRef<HTMLDivElement>(null);
     const lastMouse = useRef({ x: 0, y: 0 });
 
     const size = 80;
     const offset = size / 2;
+    const cornerSize = 24;
+    const edgeThickness = 16;
     
     // Invert rotations for CSS visual matching with Canvas projection
-    // Canvas RotY is Azimuth (Orbit around Y). CSS rotateY is similar.
-    // Canvas RotX is Elevation (Orbit around X).
+    // Canvas RotY is Azimuth (Orbit around Y). CSS rotateY is similar but often inverted depending on the engine.
+    // Here we match the previous logic: rX = rotX, rY = -rotY
     const rX = rotX * (180 / Math.PI);
     const rY = -rotY * (180 / Math.PI); 
 
-    // Helper for snapping camera
-    const snap = (rx: number, ry: number) => {
+    // Helper for snapping camera (Smooth)
+    const snap = (rx: number, ry: number, e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent drag start
         if (isDragging) return;
-        setCamera((prev: any) => ({ ...prev, rotX: rx, rotY: ry }));
+        onViewChange(rx, ry, true);
     };
 
-    // Drag Logic
+    // --- DRAG LOGIC ---
     const handleMouseDown = (e: React.MouseEvent) => {
-        e.stopPropagation();
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
         lastMouse.current = { x: e.clientX, y: e.clientY };
         
@@ -41,11 +49,13 @@ const ViewCube = ({ rotX, rotY, setCamera }: { rotX: number, rotY: number, setCa
         }
 
         if (isDragging || Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-            setCamera((prev: any) => ({
-                ...prev,
-                rotY: prev.rotY + dx * 0.005,
-                rotX: Math.max(-1.5, Math.min(1.5, prev.rotX + dy * 0.005))
-            }));
+            // Calculate new rotation
+            // Sensitivity 0.005 is typical for 1px movement
+            const newRotY = rotY + dx * 0.005;
+            const newRotX = Math.max(-1.5, Math.min(1.5, rotX + dy * 0.005));
+            
+            onViewChange(newRotX, newRotY, false); // False = Instant (no smoothing)
+            
             lastMouse.current = { x: e.clientX, y: e.clientY };
         }
     };
@@ -53,75 +63,76 @@ const ViewCube = ({ rotX, rotY, setCamera }: { rotX: number, rotY: number, setCa
     const handleMouseUp = () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        // Small delay to prevent click events firing after a drag
         setTimeout(() => setIsDragging(false), 50);
     };
 
-    // Styling Constants
-    const baseFace = "absolute inset-0 flex items-center justify-center border border-slate-400/30 bg-[#f0f2f5] text-[10px] font-extrabold text-slate-500 transition-colors select-none uppercase tracking-wider";
-    const hoverFace = "hover:bg-blue-100 hover:text-blue-600 cursor-pointer";
-    const highlight = "absolute bg-transparent hover:bg-blue-500/40 z-50 cursor-pointer transition-colors";
+    // Styles
+    const faceClass = "absolute inset-0 flex items-center justify-center border border-slate-400/20 bg-[#f0f2f5] text-[10px] font-bold text-slate-500 hover:bg-[#dbeafe] hover:text-blue-600 transition-colors cursor-pointer select-none uppercase shadow-sm opacity-90 hover:opacity-100";
+    const highlightClass = "absolute bg-transparent hover:bg-blue-500/60 cursor-pointer z-50 transition-colors";
 
-    // Isometric Calculation
-    const isoEle = Math.atan(1 / Math.sqrt(2)); // ~35.26 deg
+    // Isometric Angle (approx 35.264 degrees elevation)
+    const isoX = Math.atan(1 / Math.sqrt(2));
     const iso45 = Math.PI / 4;
 
     return (
-        <div className="absolute top-12 right-12 z-50 w-24 h-24 flex items-center justify-center group perspective-800"
+        <div className="absolute top-8 right-8 z-50 w-24 h-24 flex items-center justify-center group perspective-800"
              onMouseDown={handleMouseDown}>
             
-            {/* Compass Ring (Stationary-ish, rotates with Azimuth) */}
-            <div className="absolute w-28 h-28 rounded-full border-2 border-slate-200/50 flex items-center justify-center pointer-events-none transition-transform duration-75"
+            {/* Compass Ring */}
+            <div className="absolute w-28 h-28 rounded-full border-2 border-slate-300/30 flex items-center justify-center pointer-events-none transition-transform duration-75 ease-linear"
                  style={{ transform: `rotateX(70deg) rotateZ(${rY}deg)` }}>
-                <div className="absolute top-1 font-bold text-[9px] text-slate-400">N</div>
-                <div className="absolute bottom-1 font-bold text-[9px] text-slate-400">S</div>
-                <div className="absolute right-1 font-bold text-[9px] text-slate-400">E</div>
-                <div className="absolute left-1 font-bold text-[9px] text-slate-400">W</div>
-                <div className="w-full h-full rounded-full bg-slate-200/5"></div>
+                <span className="absolute -top-4 font-bold text-[8px] text-slate-400">N</span>
+                <span className="absolute -bottom-4 font-bold text-[8px] text-slate-400">S</span>
+                <span className="absolute -right-3 font-bold text-[8px] text-slate-400">E</span>
+                <span className="absolute -left-3 font-bold text-[8px] text-slate-400">W</span>
+                <div className="w-full h-full rounded-full bg-slate-500/5"></div>
             </div>
 
-            {/* The Cube */}
+            {/* Cube Container */}
             <div 
                 ref={cubeRef}
-                className="relative w-20 h-20 transform-3d shadow-2xl"
+                className="relative w-16 h-16 transform-3d shadow-2xl"
                 style={{ 
                     transformStyle: 'preserve-3d', 
                     transform: `rotateX(${rX}deg) rotateY(${rY}deg)`,
-                    transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.1, 0.6, 0.2, 1)'
+                    transition: isDragging ? 'none' : 'transform 0.1s linear' // CSS transition mainly for slight smoothing, logic handles the rest
                 }}
             >
                 {/* --- FACES (6) --- */}
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `translateZ(${offset}px)` }} onClick={() => snap(0, 0)}>ПЕРЕД</div>
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `rotateY(180deg) translateZ(${offset}px)` }} onClick={() => snap(0, Math.PI)}>СЗАДИ</div>
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `rotateY(90deg) translateZ(${offset}px)` }} onClick={() => snap(0, -Math.PI/2)}>ПРАВО</div>
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `rotateY(-90deg) translateZ(${offset}px)` }} onClick={() => snap(0, Math.PI/2)}>ЛЕВО</div>
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `rotateX(90deg) translateZ(${offset}px)` }} onClick={() => snap(Math.PI/2, 0)}>ВЕРХ</div>
-                <div className={`${baseFace} ${hoverFace}`} style={{ transform: `rotateX(-90deg) translateZ(${offset}px)` }} onClick={() => snap(-Math.PI/2, 0)}>НИЗ</div>
+                <div className={faceClass} style={{ transform: `translateZ(${offset}px)` }} onClick={(e) => snap(0, 0, e)}>FRONT</div>
+                <div className={faceClass} style={{ transform: `rotateY(180deg) translateZ(${offset}px)` }} onClick={(e) => snap(0, Math.PI, e)}>BACK</div>
+                <div className={faceClass} style={{ transform: `rotateY(90deg) translateZ(${offset}px)` }} onClick={(e) => snap(0, -Math.PI/2, e)}>RIGHT</div>
+                <div className={faceClass} style={{ transform: `rotateY(-90deg) translateZ(${offset}px)` }} onClick={(e) => snap(0, Math.PI/2, e)}>LEFT</div>
+                <div className={faceClass} style={{ transform: `rotateX(90deg) translateZ(${offset}px)` }} onClick={(e) => snap(Math.PI/2, 0, e)}>TOP</div>
+                <div className={faceClass} style={{ transform: `rotateX(-90deg) translateZ(${offset}px)` }} onClick={(e) => snap(-Math.PI/2, 0, e)}>BOTTOM</div>
 
-                {/* --- CORNERS (8) - Click Targets --- */}
+                {/* --- CORNERS (8) --- */}
                 {/* Top Corners */}
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${offset-12}px, ${-offset+12}px, ${offset}px)` }} onClick={() => snap(isoEle, -iso45)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${-offset+12}px, ${-offset+12}px, ${offset}px)` }} onClick={() => snap(isoEle, iso45)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${offset-12}px, ${-offset+12}px, ${-offset}px)` }} onClick={() => snap(isoEle, -iso45 - Math.PI/2)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${-offset+12}px, ${-offset+12}px, ${-offset}px)` }} onClick={() => snap(isoEle, iso45 + Math.PI/2)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${-offset+cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(isoX, -iso45, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${-offset+cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(isoX, iso45, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${-offset+cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(isoX, -iso45 - Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${-offset+cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(isoX, iso45 + Math.PI/2, e)} />
                 
                 {/* Bottom Corners */}
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${offset-12}px, ${offset-12}px, ${offset}px)` }} onClick={() => snap(-isoEle, -iso45)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${-offset+12}px, ${offset-12}px, ${offset}px)` }} onClick={() => snap(-isoEle, iso45)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${-offset+12}px, ${offset-12}px, ${-offset}px)` }} onClick={() => snap(-isoEle, -iso45 - Math.PI/2)} />
-                <div className={highlight} style={{ width: 24, height: 24, transform: `translate3d(${-offset+12}px, ${offset-12}px, ${-offset}px)` }} onClick={() => snap(-isoEle, iso45 + Math.PI/2)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${offset-cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(-isoX, -iso45, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${offset-cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(-isoX, iso45, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${offset-cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, -iso45 - Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${offset-cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, iso45 + Math.PI/2, e)} />
 
-                {/* --- EDGES (12) - Click Targets --- */}
+                {/* --- EDGES (12) --- */}
                 {/* Top Edges */}
-                <div className={highlight} style={{ width: size-24, height: 16, transform: `rotateX(90deg) translate3d(0, ${-offset}px, ${offset}px)` }} onClick={() => snap(Math.PI/4, 0)} />
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `rotateY(90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={() => snap(Math.PI/4, -Math.PI/2)} />
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `rotateY(-90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={() => snap(Math.PI/4, Math.PI/2)} />
-                <div className={highlight} style={{ width: size-24, height: 16, transform: `rotateX(-90deg) translate3d(0, ${-offset}px, ${-offset}px)` }} onClick={() => snap(Math.PI/4, Math.PI)} />
+                <div className={highlightClass} style={{ width: size-cornerSize, height: edgeThickness, transform: `rotateX(90deg) translate3d(0, ${-offset}px, ${offset}px)` }} onClick={(e) => snap(iso45, 0, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `rotateY(90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={(e) => snap(iso45, -Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `rotateY(-90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={(e) => snap(iso45, Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: size-cornerSize, height: edgeThickness, transform: `rotateX(-90deg) translate3d(0, ${-offset}px, ${-offset}px)` }} onClick={(e) => snap(iso45, Math.PI, e)} />
 
                 {/* Vertical Edges */}
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `translate3d(${offset}px, 0, ${offset}px) rotateY(45deg)` }} onClick={() => snap(0, -Math.PI/4)} />
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `translate3d(${-offset}px, 0, ${offset}px) rotateY(-45deg)` }} onClick={() => snap(0, Math.PI/4)} />
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `translate3d(${offset}px, 0, ${-offset}px) rotateY(-45deg)` }} onClick={() => snap(0, -Math.PI*0.75)} />
-                <div className={highlight} style={{ width: 16, height: size-24, transform: `translate3d(${-offset}px, 0, ${-offset}px) rotateY(45deg)` }} onClick={() => snap(0, Math.PI*0.75)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${offset}px, 0, ${offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, -iso45, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${-offset}px, 0, ${offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, iso45, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${offset}px, 0, ${-offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, -iso45 - Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${-offset}px, 0, ${-offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, iso45 + Math.PI/2, e)} />
+
             </div>
         </div>
     );
