@@ -1,8 +1,14 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { CONSTANTS, Particle3D, ThreeDViewCanvasProps, project, spawnParticle } from '../utils/airflow3DLogic';
 import ViewCube from './ViewCube';
+import { PlacedDiffuser } from '../../../../../types';
 
-const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
+interface ExtendedThreeDProps extends ThreeDViewCanvasProps {
+    placedDiffusers?: PlacedDiffuser[];
+    selectedDiffuserId?: string | null;
+}
+
+const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(0);
     const simulationRef = useRef(props);
@@ -204,38 +210,65 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
             ctx.closePath(); ctx.fill(); ctx.stroke();
         }
 
-        // Draw Diffuser Marker (Always visible)
-        const diffP = p3d(0, diffY, 0);
-        if (diffP.s > 0) {
-            ctx.beginPath();
-            ctx.fillStyle = isPowerOn ? '#3b82f6' : '#64748b';
-            const r = 0.15 * PPM * finalScale; // Visual radius
-            ctx.arc(diffP.x, diffP.y, Math.max(3, r), 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Stem to ceiling if suspended
-            if (diffuserHeight < roomHeight) {
-                const ceilP = p3d(0, rh, 0);
+        // --- DRAW DIFFUSERS ---
+        // Render placed diffusers
+        let activeSpawnX = 0;
+        let activeSpawnZ = 0;
+        let hasActiveDiffuser = false;
+
+        const drawDiffuserMarker = (x3d: number, z3d: number, isActive: boolean, spec: any) => {
+            const dp = p3d(x3d, diffY, z3d);
+            if (dp.s > 0) {
                 ctx.beginPath();
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-                ctx.lineWidth = 1;
-                ctx.moveTo(diffP.x, diffP.y);
-                ctx.lineTo(ceilP.x, ceilP.y);
-                ctx.stroke();
+                ctx.fillStyle = isActive ? '#3b82f6' : '#64748b';
+                const r = (spec?.A ? Math.sqrt(spec.A)/50 : 0.15) * PPM * finalScale * 0.5; // Scale radius by size
+                ctx.arc(dp.x, dp.y, Math.max(3, r), 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Stem to ceiling if suspended
+                if (diffuserHeight < roomHeight) {
+                    const ceilP = p3d(x3d, rh, z3d);
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.moveTo(dp.x, dp.y);
+                    ctx.lineTo(ceilP.x, ceilP.y);
+                    ctx.stroke();
+                }
             }
+        };
+
+        if (state.placedDiffusers && state.placedDiffusers.length > 0) {
+            state.placedDiffusers.forEach(d => {
+                const x3d = (d.x - roomWidth/2) * PPM;
+                const z3d = (d.y - roomLength/2) * PPM;
+                
+                const isSelected = state.selectedDiffuserId === d.id;
+                drawDiffuserMarker(x3d, z3d, isSelected, d.performance.spec);
+
+                if (isSelected) {
+                    activeSpawnX = x3d;
+                    activeSpawnZ = z3d;
+                    hasActiveDiffuser = true;
+                }
+            });
+        } else {
+            // Preview Mode: Draw one at center
+            drawDiffuserMarker(0, 0, true, state.physics.spec);
+            hasActiveDiffuser = true; // Use center
         }
 
         // --- PARTICLES (Only when Power ON) ---
         const pool = particlesRef.current;
         const dt = CONSTANTS.BASE_TIME_STEP;
 
-        if (isPowerOn) {
+        if (isPowerOn && hasActiveDiffuser) {
             if (isPlaying && !state.physics.error) {
                 const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
                 let spawnedCount = 0;
                 for (let i = 0; i < pool.length; i++) {
                     if (!pool[i].active) {
-                        spawnParticle(pool[i], state, PPM);
+                        spawnParticle(pool[i], state, PPM, activeSpawnX, activeSpawnZ);
                         spawnedCount++;
                         if (spawnedCount >= spawnRate) break;
                     }
@@ -253,10 +286,10 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
                 if (isPlaying) {
                     p.age += dt;
                     
-                    // Check physical distance from diffuser origin
-                    const dx = p.x;
+                    // Check physical distance from source
+                    const dx = p.x - activeSpawnX;
                     const dy = diffY - p.y;
-                    const dz = p.z;
+                    const dz = p.z - activeSpawnZ;
                     const distFromOrigin = Math.sqrt(dx*dx + dy*dy + dz*dz) / PPM;
 
                     if (distFromOrigin > throwLimit || p.age > p.life || p.y < 0 || p.y > rh || Math.abs(p.x) > rw/2 || Math.abs(p.z) > rl/2) {
@@ -265,9 +298,9 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
                     }
 
                     if (p.isSuction) {
-                        const dxS = 0 - p.x;
+                        const dxS = activeSpawnX - p.x;
                         const dyS = diffY - p.y;
-                        const dzS = 0 - p.z;
+                        const dzS = activeSpawnZ - p.z;
                         const dSq = dxS*dxS + dyS*dyS + dzS*dzS;
                         const dist = Math.sqrt(dSq);
                         if (dist < 20) { p.active = false; continue; }
@@ -291,9 +324,9 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
 
                 if (p.history.length > 1) {
                     // Fade out near end of throw distance
-                    const dx = p.x;
+                    const dx = p.x - activeSpawnX;
                     const dy = diffY - p.y;
-                    const dz = p.z;
+                    const dz = p.z - activeSpawnZ;
                     const currentDist = Math.sqrt(dx*dx + dy*dy + dz*dz) / PPM;
                     const distFactor = Math.max(0, 1 - (currentDist / throwLimit));
                     

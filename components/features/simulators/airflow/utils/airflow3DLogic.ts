@@ -85,7 +85,7 @@ export const getGlowColor = (t: number) => {
 };
 
 // --- PHYSICS SPAWN LOGIC ---
-export const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: number) => {
+export const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: number, offsetX: number = 0, offsetZ: number = 0) => {
     const { physics, temp, flowType, modelId, roomHeight, diffuserHeight } = state;
     
     if (physics.error) return;
@@ -110,15 +110,16 @@ export const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: 
 
     if (flowType === 'suction') {
         isSuction = true;
+        // Random volume suction
         startX = (Math.random() - 0.5) * state.roomWidth * PPM;
         startZ = (Math.random() - 0.5) * state.roomLength * PPM;
         const spawnH = Math.random() * startY;
         
         p.x = startX; p.y = spawnH; p.z = startZ;
         
-        const dx = 0 - startX;
+        const dx = offsetX - startX;
         const dy = startY - spawnH;
-        const dz = 0 - startZ;
+        const dz = offsetZ - startZ;
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         const force = ((physics.v0 || 0) * 500) / (dist + 10);
         
@@ -198,7 +199,11 @@ export const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: 
             vz += Math.cos(angle) * swirlSpeed;
         }
 
-        p.x = startX; p.y = startY; p.z = startZ;
+        // Apply Offset
+        p.x = startX + offsetX; 
+        p.y = startY; 
+        p.z = startZ + offsetZ;
+        
         // Give particles enough life so the distance check (throwDist) clips them instead of time
         p.life = 10.0 + Math.random() * 2.0;
         p.color = getGlowColor(temp);

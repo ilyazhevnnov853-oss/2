@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
@@ -41,9 +41,14 @@ interface SideViewCanvasProps {
   flowType: string; 
   modelId: string;
   showGrid: boolean;
-  roomHeight: number; 
+  roomHeight: number;
+  roomWidth: number;
+  roomLength: number;
   diffuserHeight: number; 
   workZoneHeight: number;
+  placedDiffusers?: PlacedDiffuser[];
+  selectedDiffuserId?: string | null;
+  viewAxis: 'front' | 'side';
 }
 
 // --- HELPERS ---
@@ -54,8 +59,23 @@ const getGlowColor = (t: number) => {
     return `255, 255, 255`;
 };
 
-const getSideLayout = (w: number, h: number, rh: number) => {
-    return { ppm: h / rh };
+const getSideLayout = (w: number, h: number, rh: number, wallWidth: number) => {
+    const padding = 40;
+    const availW = w - padding * 2;
+    const availH = h - padding * 2;
+    // Fit both width and height
+    const ppm = Math.min(availW / wallWidth, availH / rh);
+    
+    // Center the room
+    const contentW = wallWidth * ppm;
+    const contentH = rh * ppm;
+    const originX = (w - contentW) / 2;
+    const originY = h - (h - contentH) / 2; // Bottom aligned usually, but here Y grows down.
+    // Let's align bottom of room to bottom of visible area minus padding
+    const floorY = h - padding;
+    const ceilingY = floorY - contentH;
+    
+    return { ppm, originX, floorY, ceilingY };
 };
 
 const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
@@ -63,7 +83,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     const requestRef = useRef<number>(0);
     const simulationRef = useRef(props);
     const particlePool = useRef<Particle[]>([]);
-
+    
     // Init Pool
     useEffect(() => {
         if (particlePool.current.length === 0) {
@@ -87,23 +107,18 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         simulationRef.current = props;
     }, [props]);
 
-    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number) => {
-        const { physics, temp, flowType, modelId, width, roomHeight, diffuserHeight } = state;
+    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number, spawnX: number, spawnY: number) => {
+        const { physics, temp, flowType, modelId, viewAxis } = state;
         
         if (physics.error) return;
         const spec = physics.spec;
         if (!spec || !spec.A) return;
 
         const nozzleW = (spec.A / 1000) * ppm;
-        const scale = ppm / 1000;
-        
-        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
-        const hD = (spec.D || 0) * scale;
-        const startY = diffuserYPos + hD;
-
         const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
 
-        let startX = width / 2;
+        let startX = spawnX;
+        let startY = spawnY;
         let vx = 0, vy = 0;
         let drag = 0.96;
         let waveAmp = 5;
@@ -117,12 +132,19 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
         if (flowType === 'suction') {
             isSuction = true;
-            startX = Math.random() * width;
-            const spawnY = Math.random() * state.height;
-            const targetX = width / 2;
-            const targetY = diffuserYPos;
+            // Random point in room volume projected to 2D
+            const wallW = viewAxis === 'front' ? state.roomWidth : state.roomLength;
+            const { originX, ceilingY } = getSideLayout(state.width, state.height, state.roomHeight, wallW);
+            
+            startX = originX + Math.random() * (wallW * ppm);
+            const currentFloorY = ceilingY + state.roomHeight * ppm;
+            const randH = Math.random() * (state.roomHeight * ppm);
+            startY = ceilingY + randH;
+
+            const targetX = spawnX;
+            const targetY = spawnY;
             const dx = targetX - startX;
-            const dy = targetY - spawnY;
+            const dy = targetY - startY;
             const dist = Math.sqrt(dx*dx + dy*dy);
             const force = ((physics.v0 || 0) * 500) / (dist + 10);
             vx = (dx / dist) * force;
@@ -130,11 +152,12 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             drag = 1.0; waveAmp = 0;
             p.life = 3.0; 
             p.color = '150, 150, 150';
+            p.x = startX; p.y = startY;
         } else {
             if (flowType.includes('horizontal')) {
                 isHorizontal = true;
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.55);
+                startX = spawnX + side * (nozzleW * 0.55);
                 const spread = (Math.random() - 0.5) * 0.1; 
                 const angle = side === 1 ? spread : Math.PI + spread;
                 vx = Math.cos(angle) * pxSpeed * 1.2; 
@@ -143,42 +166,42 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             } else if (flowType === '4-way') {
                 isHorizontal = true;
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.55);
+                startX = spawnX + side * (nozzleW * 0.55);
                 vx = side * pxSpeed * 1.0;
                 vy = pxSpeed * 0.1;
             } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.45);
+                startX = spawnX + side * (nozzleW * 0.45);
                 const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
                 vx = side * Math.sin(coneAngle) * pxSpeed;
                 vy = Math.cos(coneAngle) * pxSpeed;
                 waveAmp = 5; drag = 0.95;
             } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                startX = spawnX + (Math.random() - 0.5) * nozzleW * 0.95;
                 const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
                 vx = Math.sin(spreadAngle) * pxSpeed * 0.8;
                 vy = Math.cos(spreadAngle) * pxSpeed;
                 waveAmp = 8; drag = 0.96;
             } else if (flowType === 'vertical-swirl') {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.9;
+                startX = spawnX + (Math.random() - 0.5) * nozzleW * 0.9;
                 const spread = (Math.random() - 0.5) * 1.5; 
                 vx = Math.sin(spread) * pxSpeed * 0.5;
                 vy = Math.cos(spread) * pxSpeed;
                 waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
             } else if (flowType === 'vertical-compact') {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                startX = spawnX + (Math.random() - 0.5) * nozzleW * 0.95;
                 const spread = (Math.random() - 0.5) * 0.05; 
                 vx = Math.sin(spread) * pxSpeed * 0.3;
                 vy = Math.cos(spread) * pxSpeed * 1.3; 
                 waveAmp = 1; drag = 0.985;
             }
 
-            // Extended life so distance clipping works
             p.life = 10.0 + Math.random() * 2.0;
             p.color = getGlowColor(temp);
+            p.x = startX; p.y = startY;
         }
 
-        p.x = startX; p.y = startY; p.vx = vx; p.vy = vy; 
+        p.vx = vx; p.vy = vy; 
         p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
         p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
         p.isHorizontal = isHorizontal; p.isSuction = isSuction;
@@ -187,69 +210,68 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         p.history.length = 0; 
     };
 
-    const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number, state: SideViewCanvasProps) => {
-        const spec = state.physics.spec;
-        if (!spec || !spec.A) return;
+    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, originX: number, ceilingY: number, state: SideViewCanvasProps, wallW: number) => {
+        // Draw Room Box
+        const floorY = ceilingY + state.roomHeight * ppm;
+        const roomPxW = wallW * ppm;
 
-        const scale = ppm / 1000;
-        const wA = spec.A * scale;
-        const hD = (spec.D || 0) * scale;
-        const hC = (spec.C || 0) * scale; 
-        const hTotal = hD + hC;
-        const yPos = (state.roomHeight - state.diffuserHeight) * ppm;
+        // Background for room
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(originX, ceilingY, roomPxW, floorY - ceilingY);
         
-        ctx.fillStyle = '#334155';
-        ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
-        
-        ctx.save();
-        ctx.translate(0, yPos);
-        ctx.fillStyle = '#475569';
-        ctx.beginPath();
-        ctx.rect(cx - wA/2, 0, wA, hD); ctx.fill();
-        
-        ctx.fillStyle = '#94a3b8';
-        ctx.beginPath();
-        ctx.moveTo(cx - wA/2, hD);
-        
-        if (state.modelId === 'dpu-s') {
-             ctx.lineTo(cx - wA/2 + 10, hTotal + 20);
-             ctx.lineTo(cx + wA/2 - 10, hTotal + 20); ctx.lineTo(cx + wA/2, hD);
-        } else if (state.modelId === 'amn-adn') {
-             ctx.rect(cx - wA/2, hD, wA, 5*scale);
-        } else {
-             ctx.quadraticCurveTo(cx - wA/2, hTotal, cx, hTotal + 5);
-             ctx.quadraticCurveTo(cx + wA/2, hTotal, cx + wA/2, hD);
-        }
-        ctx.closePath(); ctx.fill();
-        ctx.restore();
-    };
-
-    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: SideViewCanvasProps) => {
         if (!state.showGrid) return;
         
         ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
         const step = 0.5 * ppm;
         
         ctx.beginPath();
-        for (let x = w/2; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-        for (let x = w/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
-        for (let y = 0; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        // Vertical lines
+        for (let x = originX; x <= originX + roomPxW; x += step) { ctx.moveTo(x, ceilingY); ctx.lineTo(x, floorY); }
+        // Horizontal lines
+        for (let y = ceilingY; y <= floorY; y += step) { ctx.moveTo(originX, y); ctx.lineTo(originX + roomPxW, y); }
         ctx.stroke();
         
+        // Work Zone
         if (state.workZoneHeight > 0) {
-            const wzY = (state.roomHeight - state.workZoneHeight) * ppm;
+            const wzY = floorY - state.workZoneHeight * ppm;
             ctx.beginPath();
             ctx.setLineDash([10, 5]);
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
+            ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
             ctx.lineWidth = 2;
-            ctx.moveTo(0, wzY);
-            ctx.lineTo(w, wzY);
+            ctx.moveTo(originX, wzY);
+            ctx.lineTo(originX + roomPxW, wzY);
             ctx.stroke();
             ctx.setLineDash([]);
             ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
             ctx.font = 'bold 10px Inter';
-            ctx.fillText(`РАБОЧАЯ ЗОНА (${state.workZoneHeight}м)`, 10, wzY - 5);
+            ctx.fillText(`РЗ (${state.workZoneHeight}м)`, originX + 5, wzY - 5);
+        }
+
+        // Walls
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#334155';
+        ctx.strokeRect(originX, ceilingY, roomPxW, floorY - ceilingY);
+    };
+
+    const drawDiffuser = (ctx: CanvasRenderingContext2D, cx: number, cy: number, ppm: number, isActive: boolean, spec?: any) => {
+        if (!spec) return;
+        const wA = (spec.A / 1000) * ppm;
+        const hD = (spec.D / 1000) * ppm || 20;
+        
+        ctx.fillStyle = isActive ? '#3b82f6' : '#475569';
+        ctx.beginPath();
+        // Simple shape for now
+        ctx.moveTo(cx - wA/2, cy);
+        ctx.lineTo(cx + wA/2, cy);
+        ctx.lineTo(cx + wA/3, cy + hD);
+        ctx.lineTo(cx - wA/3, cy + hD);
+        ctx.closePath();
+        ctx.fill();
+        if (isActive) {
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
     };
 
@@ -260,39 +282,67 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         if (!ctx) return;
 
         const state = simulationRef.current;
-        const { width, height, isPowerOn, isPlaying, roomHeight, diffuserHeight } = state;
-        
+        const { width, height, isPowerOn, isPlaying, viewAxis } = state;
         const dt = CONSTANTS.BASE_TIME_STEP;
-        const { ppm } = getSideLayout(width, height, roomHeight);
-        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
 
-        // If simulation is OFF, simply clear the canvas
-        if (!isPowerOn) {
-                ctx.clearRect(0, 0, width, height);
-                // Fill bg for better clear
-                ctx.fillStyle = '#030304';
-                ctx.fillRect(0, 0, width, height);
-                drawSideViewGrid(ctx, width, height, ppm, state);
-                drawDiffuserSideProfile(ctx, width/2, ppm, state);
-                requestRef.current = requestAnimationFrame(animate);
-                return;
-        }
+        // View Layout
+        // If front, X is Width. If Side, X is Length.
+        const wallW = viewAxis === 'front' ? state.roomWidth : state.roomLength;
+        const { ppm, originX, floorY, ceilingY } = getSideLayout(width, height, state.roomHeight, wallW);
 
-        // Trail effect
-        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
+        // Clear
+        ctx.fillStyle = '#030304';
         ctx.fillRect(0, 0, width, height);
+
+        drawSideViewGrid(ctx, width, height, ppm, originX, ceilingY, state, wallW);
+
+        // Draw Diffusers
+        // Front View: X is x-coord. Side View: X is y-coord.
+        // We render ALL placed diffusers.
+        const activeDiffusers: {x: number, y: number}[] = [];
         
-        drawSideViewGrid(ctx, width, height, ppm, state);
+        if (state.placedDiffusers && state.placedDiffusers.length > 0) {
+            state.placedDiffusers.forEach(d => {
+                // Project position
+                // In plan: x is "width", y is "length"
+                // Front view: X axis is Width (x).
+                // Side view: X axis is Length (y).
+                const posInWall = viewAxis === 'front' ? d.x : d.y;
+                const cx = originX + posInWall * ppm;
+                // Since Diffuser Height is parameter for ceiling mounting or drop, we use params.diffuserHeight for simplicity for the *active* one, 
+                // but for placed ones we should theoretically track their height. Assuming all same height for now.
+                const diffY = ceilingY + (state.roomHeight - state.diffuserHeight) * ppm; 
+                
+                const isSelected = state.selectedDiffuserId === d.id;
+                drawDiffuser(ctx, cx, diffY, ppm, isSelected, d.performance.spec);
+
+                if (isSelected) {
+                    // Only spawn particles from the SELECTED diffuser
+                    activeDiffusers.push({ x: cx, y: diffY + (d.performance.spec.D/1000 * ppm || 20) });
+                }
+            });
+        } else {
+            // Preview Mode (No placed diffusers yet, or creating one)
+            // Show one in center
+            const cx = originX + (wallW/2) * ppm;
+            const diffY = ceilingY + (state.roomHeight - state.diffuserHeight) * ppm;
+            const spec = state.physics.spec;
+            drawDiffuser(ctx, cx, diffY, ppm, true, spec);
+            activeDiffusers.push({ x: cx, y: diffY + ((spec?.D||50)/1000 * ppm) });
+        }
 
         const pool = particlePool.current;
         
         // 1. UPDATE AND SPAWN
-        if (isPowerOn && isPlaying && !state.physics.error) {
+        if (isPowerOn && isPlaying && !state.physics.error && activeDiffusers.length > 0) {
             const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
             let spawnedCount = 0;
+            // Simple distribution: Spawn from the first active source found (usually 1 selected)
+            const source = activeDiffusers[0];
+
             for (let i = 0; i < pool.length; i++) {
                 if (!pool[i].active) {
-                    spawnParticle(pool[i], state, ppm);
+                    spawnParticle(pool[i], state, ppm, source.x, source.y);
                     spawnedCount++;
                     if (spawnedCount >= spawnRate) break;
                 }
@@ -300,7 +350,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         }
 
         // 2. UPDATE PHYSICS & BATCHING
-        const maxH = height;
         const batches: Record<string, Particle[]> = {};
         const QUANTIZE = 10;
         const throwLimit = state.physics.throwDist || 50;
@@ -312,34 +361,29 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             if (isPowerOn && isPlaying) {
                 p.age += dt;
                 
-                // Calculate physical distance from diffuser origin
-                // Origin X is center (width/2), Origin Y is diffuserYPos
-                const distPx = Math.sqrt(Math.pow(p.x - width/2, 2) + Math.pow(p.y - diffuserYPos, 2));
+                // Calculate physical distance from source
+                const source = activeDiffusers[0] || {x: width/2, y: 0};
+                const distPx = Math.sqrt(Math.pow(p.x - source.x, 2) + Math.pow(p.y - source.y, 2));
                 const distMeters = distPx / ppm;
 
-                if (distMeters > throwLimit || p.age > p.life || p.y > maxH || p.x < 0 || p.x > width || p.y < -100) {
+                if (distMeters > throwLimit || p.age > p.life || p.y > floorY || p.x < originX || p.x > originX + wallW * ppm || p.y < 0) {
                     p.active = false;
                     continue;
                 }
 
                 if (p.isSuction) {
-                    const targetX = width / 2;
-                    const targetY = diffuserYPos;
-                    const dx = targetX - p.x;
-                    const dy = targetY - p.y;
+                    const dx = source.x - p.x;
+                    const dy = source.y - p.y;
                     const distSq = dx*dx + dy*dy;
                     const dist = Math.sqrt(distSq);
-                    if (dist < 20) { 
-                        p.active = false;
-                        continue;
-                    }
+                    if (dist < 20) { p.active = false; continue; }
                     const force = ((state.physics.v0 || 0) * 2000) / (distSq + 100);
                     p.vx += (dx / dist) * force * dt;
                     p.vy += (dy / dist) * force * dt;
-                    p.x += p.vx; 
-                    p.y += p.vy;
+                    p.x += p.vx; p.y += p.vy;
                 } else {
                     if (p.isHorizontal) {
+                        // Floor collision bounce/slide
                         if (p.y < (height * 0.15) && Math.abs(p.vx) > 0.3) { p.vy += (0 - p.y) * 5.0 * dt; } 
                         else { p.vy += p.buoyancy * dt * 0.5; }
                     } else {
@@ -359,8 +403,8 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
             // Add to Batch
             if (p.history.length > 1) {
-                // Fade out near end of throw distance
-                const distPx = Math.sqrt(Math.pow(p.x - width/2, 2) + Math.pow(p.y - diffuserYPos, 2));
+                const source = activeDiffusers[0] || {x: width/2, y: 0};
+                const distPx = Math.sqrt(Math.pow(p.x - source.x, 2) + Math.pow(p.y - source.y, 2));
                 const currentDist = distPx / ppm;
                 const distFactor = Math.max(0, 1 - (currentDist / throwLimit));
 
@@ -405,7 +449,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         }
 
         ctx.globalCompositeOperation = 'source-over';
-        drawDiffuserSideProfile(ctx, width/2, ppm, state);
 
         requestRef.current = requestAnimationFrame(animate);
     }, []);
