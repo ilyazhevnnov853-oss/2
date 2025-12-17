@@ -3,20 +3,28 @@ import { PerformanceResult } from '../../../../../types';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
-  MAX_PARTICLES: 1500, 
-  HISTORY_LENGTH: 12,
-  SPAWN_RATE: 3
+  HISTORY_RECORD_INTERVAL: 0.015,
+  MAX_PARTICLES: 2000, 
+  SPAWN_RATE_BASE: 5,
+  SPAWN_RATE_MULTIPLIER: 8
 };
 
+// --- TYPES ---
 interface Particle3D {
     active: boolean;
     x: number; y: number; z: number;
     vx: number; vy: number; vz: number;
-    age: number; life: number;
-    color: string;
-    size: number;
-    history: {x: number, y: number, z: number}[];
-    turbulence: number;
+    buoyancy: number; 
+    drag: number; 
+    age: number; 
+    life: number; 
+    lastHistoryTime: number; 
+    history: {x: number, y: number, z: number, age: number}[]; 
+    color: string; 
+    waveFreq: number; 
+    wavePhase: number; 
+    waveAmp: number;
+    isSuction: boolean;
 }
 
 interface ThreeDViewCanvasProps {
@@ -60,7 +68,6 @@ const project = (
     const fov = 1000;
     const cameraDist = 1500; 
     
-    // Avoid division by zero or negative behind camera
     const depth = cameraDist + z2;
     if (depth < 10) return { x: -10000, y: -10000, s: 0, z: z2 }; // Clipped
 
@@ -75,10 +82,72 @@ const project = (
 };
 
 const getGlowColor = (t: number) => {
-    if (t <= 18) return `64, 224, 255`; // Cold Blue
-    if (t >= 28) return `255, 99, 132`; // Hot Red
-    if (t > 18 && t < 28) return `100, 255, 160`; // Comfort Green
+    if (t <= 18) return `64, 224, 255`; 
+    if (t >= 28) return `255, 99, 132`; 
+    if (t > 18 && t < 28) return `100, 255, 160`; 
     return `255, 255, 255`;
+};
+
+// --- VIEW CUBE COMPONENT ---
+const ViewCube = ({ rotX, rotY, setCamera }: { rotX: number, rotY: number, setCamera: any }) => {
+    const size = 60; // px
+    const offset = size / 2;
+    
+    // Invert Y rotation to match CSS coordinate system with Canvas projection
+    const rX = rotX * (180 / Math.PI);
+    const rY = -rotY * (180 / Math.PI);
+
+    const faceStyle = "absolute inset-0 flex items-center justify-center border border-slate-300/50 bg-white/90 backdrop-blur-md text-[9px] font-extrabold text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer select-none uppercase tracking-wider shadow-[inset_0_0_10px_rgba(0,0,0,0.05)]";
+
+    const snap = (rx: number, ry: number) => (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setCamera((prev: any) => ({ ...prev, rotX: rx, rotY: ry }));
+    };
+
+    return (
+        <div className="absolute top-6 right-6 w-[60px] h-[60px] z-50 group" style={{ perspective: '300px' }}>
+            {/* Compass Ring */}
+            <div className="absolute inset-[-10px] rounded-full border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            
+            <div 
+                className="relative w-full h-full transform-3d transition-transform duration-100 ease-linear"
+                style={{ 
+                    transformStyle: 'preserve-3d', 
+                    transform: `rotateX(${rX}deg) rotateY(${rY}deg)`
+                }}
+            >
+                {/* FRONT (0, 0) */}
+                <div className={faceStyle} style={{ transform: `translateZ(${offset}px)` }} onClick={snap(0, 0)}>
+                    ПЕРЕД
+                </div>
+
+                {/* BACK (0, PI) */}
+                <div className={faceStyle} style={{ transform: `rotateY(180deg) translateZ(${offset}px)` }} onClick={snap(0, Math.PI)}>
+                    ТЫЛ
+                </div>
+
+                {/* RIGHT (0, -PI/2) */}
+                <div className={faceStyle} style={{ transform: `rotateY(90deg) translateZ(${offset}px)` }} onClick={snap(0, -Math.PI/2)}>
+                    ПРАВО
+                </div>
+
+                {/* LEFT (0, PI/2) */}
+                <div className={faceStyle} style={{ transform: `rotateY(-90deg) translateZ(${offset}px)` }} onClick={snap(0, Math.PI/2)}>
+                    ЛЕВО
+                </div>
+
+                {/* TOP (PI/2, 0) */}
+                <div className={faceStyle} style={{ transform: `rotateX(90deg) translateZ(${offset}px)` }} onClick={snap(Math.PI/2, 0)}>
+                    ВЕРХ
+                </div>
+
+                {/* BOTTOM (-PI/2, 0) */}
+                <div className={faceStyle} style={{ transform: `rotateX(-90deg) translateZ(${offset}px)` }} onClick={snap(-Math.PI/2, 0)}>
+                    НИЗ
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
@@ -89,11 +158,11 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     
     // Camera State
     const [camera, setCamera] = useState({ 
-        rotX: 0.2, 
-        rotY: -0.5, 
+        rotX: 0.3, 
+        rotY: -0.6, 
         panX: 0, 
         panY: 0, 
-        zoom: 1 
+        zoom: 1.0 
     });
     
     const isDragging = useRef(false);
@@ -108,11 +177,12 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
                     active: false,
                     x: 0, y: 0, z: 0,
                     vx: 0, vy: 0, vz: 0,
-                    age: 0, life: 0,
+                    buoyancy: 0, drag: 0, age: 0, life: 0,
+                    lastHistoryTime: 0,
+                    history: [], 
                     color: '255,255,255',
-                    size: 1,
-                    history: [],
-                    turbulence: Math.random()
+                    waveFreq: 0, wavePhase: 0, waveAmp: 0,
+                    isSuction: false
                 });
             }
         }
@@ -121,49 +191,161 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
     // Sync Props
     useEffect(() => { simulationRef.current = props; }, [props]);
 
-    // Input Handlers
+    // --- PHYSICS SPAWN LOGIC ---
+    const spawnParticle = (p: Particle3D, state: ThreeDViewCanvasProps, PPM: number) => {
+        const { physics, temp, flowType, modelId, roomHeight, diffuserHeight } = state;
+        
+        if (physics.error) return;
+        const spec = physics.spec;
+        if (!spec || !spec.A) return;
+        
+        const nozzleW = (spec.A / 1000) * PPM;
+        const startY = (diffuserHeight * PPM); 
+        
+        const pxSpeed = (physics.v0 || 0) * PPM * 0.8;
+
+        let startX = 0, startZ = 0;
+        let vx = 0, vy = 0, vz = 0;
+        let drag = 0.96;
+        let waveAmp = 5;
+        let waveFreq = 4 + Math.random() * 4;
+        let isSuction = false;
+
+        const physicsAr = physics.Ar || 0; 
+        const visualGain = 50.0; 
+        const buoyancy = physicsAr * (physics.v0 * physics.v0) * PPM * visualGain;
+
+        if (flowType === 'suction') {
+            isSuction = true;
+            startX = (Math.random() - 0.5) * state.roomWidth * PPM;
+            startZ = (Math.random() - 0.5) * state.roomLength * PPM;
+            const spawnH = Math.random() * startY;
+            
+            p.x = startX; p.y = spawnH; p.z = startZ;
+            
+            const dx = 0 - startX;
+            const dy = startY - spawnH;
+            const dz = 0 - startZ;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            const force = ((physics.v0 || 0) * 500) / (dist + 10);
+            
+            p.vx = (dx / dist) * force;
+            p.vy = (dy / dist) * force;
+            p.vz = (dz / dist) * force;
+            
+            drag = 1.0; waveAmp = 0;
+            p.life = 3.0; 
+            p.color = '150, 150, 150';
+        } else {
+            let angle = Math.random() * Math.PI * 2; 
+            let radSpeed = 0;
+            let vertSpeed = 0;
+
+            if (flowType.includes('horizontal') || flowType === '4-way') {
+                if (flowType === '4-way') {
+                    const quad = Math.floor(Math.random() * 4);
+                    const baseAngle = quad * (Math.PI / 2);
+                    const spread = (Math.random() - 0.5) * 0.2; 
+                    angle = baseAngle + spread;
+                    radSpeed = pxSpeed * 1.0;
+                    vertSpeed = -pxSpeed * 0.1;
+                } else {
+                    radSpeed = pxSpeed * 1.2;
+                    vertSpeed = -pxSpeed * 0.2;
+                }
+                
+                startX = Math.cos(angle) * (nozzleW * 0.55);
+                startZ = Math.sin(angle) * (nozzleW * 0.55);
+                
+                if (flowType.includes('swirl')) { 
+                    waveAmp = 15; waveFreq = 8; 
+                } else { 
+                    waveAmp = 3; 
+                }
+
+            } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
+                const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
+                const speed = pxSpeed;
+                radSpeed = Math.sin(coneAngle) * speed;
+                vertSpeed = -Math.cos(coneAngle) * speed;
+                waveAmp = 5; drag = 0.95;
+
+            } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
+                const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180);
+                startX = (Math.random() - 0.5) * nozzleW * 0.95; 
+                startZ = (Math.random() - 0.5) * nozzleW * 0.95;
+                const rSpd = Math.sin(spreadAngle) * pxSpeed * 0.8; 
+                radSpeed = Math.abs(rSpd);
+                vertSpeed = -Math.cos(spreadAngle) * pxSpeed;
+                waveAmp = 8; drag = 0.96;
+
+            } else if (flowType === 'vertical-swirl') {
+                startX = (Math.random() - 0.5) * nozzleW * 0.9;
+                startZ = (Math.random() - 0.5) * nozzleW * 0.9;
+                const spread = (Math.random() - 0.5) * 1.5;
+                radSpeed = Math.sin(spread) * pxSpeed * 0.5;
+                vertSpeed = -Math.cos(spread) * pxSpeed;
+                waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
+            } else {
+                startX = (Math.random() - 0.5) * nozzleW * 0.95;
+                startZ = (Math.random() - 0.5) * nozzleW * 0.95;
+                const spread = (Math.random() - 0.5) * 0.05;
+                radSpeed = Math.sin(spread) * pxSpeed * 0.3;
+                vertSpeed = -Math.cos(spread) * pxSpeed * 1.3;
+                waveAmp = 1; drag = 0.985;
+            }
+
+            vx = Math.cos(angle) * radSpeed;
+            vz = Math.sin(angle) * radSpeed;
+            vy = vertSpeed;
+
+            if (flowType.includes('swirl')) {
+                const swirlSpeed = pxSpeed * 0.5;
+                vx += -Math.sin(angle) * swirlSpeed;
+                vz += Math.cos(angle) * swirlSpeed;
+            }
+
+            p.x = startX; p.y = startY; p.z = startZ;
+            p.life = 2.0 + Math.random() * 1.5;
+            p.color = getGlowColor(temp);
+        }
+
+        p.vx = vx; p.vy = vy; p.vz = vz;
+        p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
+        p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
+        p.isSuction = isSuction;
+        p.active = true;
+        p.lastHistoryTime = 0;
+        p.history.length = 0; 
+    };
+
     const handleWheel = useCallback((e: React.WheelEvent) => {
         e.stopPropagation();
         const delta = -Math.sign(e.deltaY) * 0.1;
-        setCamera(prev => ({
-            ...prev,
-            zoom: Math.max(0.1, Math.min(5, prev.zoom + delta))
-        }));
+        setCamera(prev => ({ ...prev, zoom: Math.max(0.1, Math.min(5, prev.zoom + delta)) }));
     }, []);
 
     const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
         let clientX, clientY;
         if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
+            clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+            isDragging.current = true;
         } else {
-            clientX = (e as React.MouseEvent).clientX;
-            clientY = (e as React.MouseEvent).clientY;
-            // Middle mouse or Shift+Left for panning
-            if ((e as React.MouseEvent).button === 1 || (e as React.MouseEvent).shiftKey) {
-                isPanning.current = true;
-            } else {
-                isDragging.current = true;
-            }
+            clientX = (e as React.MouseEvent).clientX; clientY = (e as React.MouseEvent).clientY;
+            if ((e as React.MouseEvent).button === 1 || (e as React.MouseEvent).shiftKey) isPanning.current = true;
+            else isDragging.current = true;
         }
-        // Touch defaults to drag for now
-        if ('touches' in e) isDragging.current = true;
-
         lastMouse.current = { x: clientX, y: clientY };
     };
 
     const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDragging.current && !isPanning.current) return;
-        
         let clientX, clientY;
         if ('touches' in e) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
+            clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
         } else {
-            clientX = (e as React.MouseEvent).clientX;
-            clientY = (e as React.MouseEvent).clientY;
+            clientX = (e as React.MouseEvent).clientX; clientY = (e as React.MouseEvent).clientY;
         }
-
         const dx = clientX - lastMouse.current.x;
         const dy = clientY - lastMouse.current.y;
         
@@ -180,14 +362,10 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
                 panY: prev.panY + dy
             }));
         }
-        
         lastMouse.current = { x: clientX, y: clientY };
     };
 
-    const handleEnd = () => {
-        isDragging.current = false;
-        isPanning.current = false;
-    };
+    const handleEnd = () => { isDragging.current = false; isPanning.current = false; };
 
     const animate = useCallback(() => {
         const canvas = canvasRef.current;
@@ -196,246 +374,214 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         if (!ctx) return;
 
         const state = simulationRef.current;
-        const { width, height, isPowerOn, isPlaying, roomHeight, roomWidth, roomLength, diffuserHeight, workZoneHeight = 0 } = state;
-        
-        // Trail Effect (instead of solid clear)
-        ctx.fillStyle = 'rgba(3, 3, 4, 0.25)';
-        ctx.fillRect(0, 0, width, height);
+        const { width, height, isPowerOn, isPlaying, roomHeight, roomWidth, roomLength, diffuserHeight, workZoneHeight } = state;
 
-        // --- COORDINATE SYSTEM ---
-        const PPM = 80; // Simulation scale (Pixels Per Meter)
+        if (!isPowerOn) {
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = '#030304';
+            ctx.fillRect(0, 0, width, height);
+        } else {
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.25)';
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        const PPM = (height / roomHeight) || 50; 
         
         const rw = roomWidth * PPM;
         const rl = roomLength * PPM;
         const rh = roomHeight * PPM;
-        
-        // Calculate Scale to fit room in view
+        const diffY = diffuserHeight * PPM;
+
         const maxDim = Math.max(rw, rl, rh);
-        const fitScale = (Math.min(width, height) / maxDim) * 0.6; 
-        
-        // Combined Scale
+        const fitScale = (Math.min(width, height) / maxDim) * 0.65;
         const finalScale = fitScale * camera.zoom;
+        const yOffset = -rh / 2;
 
-        const diffY = (diffuserHeight) * PPM; 
+        const p3d = (x: number, y: number, z: number) => 
+            project(x, -(y + yOffset), z, width, height, camera.rotX, camera.rotY, finalScale, camera.panX, camera.panY);
 
-        // Center vertically based on room height
-        const yOffset = -rh/2;
+        // --- DRAW ROOM ---
+        if (isPowerOn) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            const corners = [
+                {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2},
+                {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}
+            ].map(v => p3d(v.x, v.y, v.z));
 
-        const proj = (p: {x:number, y:number, z:number}) => 
-            project(
-                p.x, -(p.y + yOffset), p.z, 
-                width, height, 
-                camera.rotX, camera.rotY, 
-                finalScale,
-                camera.panX, camera.panY
-            );
+            ctx.beginPath();
+            [0,4].forEach(start => {
+                ctx.moveTo(corners[start].x, corners[start].y);
+                ctx.lineTo(corners[start+1].x, corners[start+1].y);
+                ctx.lineTo(corners[start+2].x, corners[start+2].y);
+                ctx.lineTo(corners[start+3].x, corners[start+3].y);
+                ctx.closePath();
+            });
+            [0,1,2,3].forEach(i => {
+                ctx.moveTo(corners[i].x, corners[i].y);
+                ctx.lineTo(corners[i+4].x, corners[i+4].y);
+            });
+            ctx.stroke();
 
-        // --- DRAW GRID & ROOM ---
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        
-        // Floor & Ceiling Corners
-        const corners = [
-            {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2}, // Floor
-            {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}, // Ceiling
-        ];
-        const pc = corners.map(proj);
-
-        // Draw Box
-        ctx.beginPath();
-        // Floor
-        ctx.moveTo(pc[0].x, pc[0].y); ctx.lineTo(pc[1].x, pc[1].y); ctx.lineTo(pc[2].x, pc[2].y); ctx.lineTo(pc[3].x, pc[3].y); ctx.closePath();
-        // Ceiling
-        ctx.moveTo(pc[4].x, pc[4].y); ctx.lineTo(pc[5].x, pc[5].y); ctx.lineTo(pc[6].x, pc[6].y); ctx.lineTo(pc[7].x, pc[7].y); ctx.closePath();
-        // Verticals
-        ctx.moveTo(pc[0].x, pc[0].y); ctx.lineTo(pc[4].x, pc[4].y);
-        ctx.moveTo(pc[1].x, pc[1].y); ctx.lineTo(pc[5].x, pc[5].y);
-        ctx.moveTo(pc[2].x, pc[2].y); ctx.lineTo(pc[6].x, pc[6].y);
-        ctx.moveTo(pc[3].x, pc[3].y); ctx.lineTo(pc[7].x, pc[7].y);
-        ctx.stroke();
-
-        // Floor Grid
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-        ctx.beginPath();
-        const gridStep = 1 * PPM; 
-        for(let x = -rw/2; x <= rw/2; x+=gridStep) {
-            const p1 = proj({x, y:0, z: -rl/2});
-            const p2 = proj({x, y:0, z: rl/2});
-            ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-        }
-        for(let z = -rl/2; z <= rl/2; z+=gridStep) {
-            const p1 = proj({x: -rw/2, y:0, z});
-            const p2 = proj({x: rw/2, y:0, z});
-            ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-        }
-        ctx.stroke();
-
-        // Draw Diffuser
-        const dPos = {x: 0, y: diffY, z: 0};
-        const pDiff = proj(dPos);
-        ctx.fillStyle = '#64748b';
-        ctx.beginPath();
-        ctx.arc(pDiff.x, pDiff.y, Math.max(2, 8 * pDiff.s), 0, Math.PI*2);
-        ctx.fill();
-
-        // --- PARTICLE LOGIC ---
-        if (isPowerOn && isPlaying && !state.physics.error) {
-            const dt = CONSTANTS.BASE_TIME_STEP;
-            const buoyancy = (state.physics.Ar || 0) * 9.81 * PPM * 0.5;
-            let spawned = 0;
-            const v0 = state.physics.v0 || 0;
-            const color = getGlowColor(state.temp);
-
-            for (let i = 0; i < particlesRef.current.length; i++) {
-                const p = particlesRef.current[i];
+            if (workZoneHeight > 0) {
+                const wy = workZoneHeight * PPM;
+                const wc = [
+                    {x: -rw/2, y: wy, z: -rl/2}, {x: rw/2, y: wy, z: -rl/2},
+                    {x: rw/2, y: wy, z: rl/2}, {x: -rw/2, y: wy, z: rl/2}
+                ].map(v => p3d(v.x, v.y, v.z));
                 
-                // Spawn
-                if (!p.active && spawned < CONSTANTS.SPAWN_RATE) {
-                    p.active = true;
-                    p.x = 0; p.y = diffY - 2; p.z = 0;
-                    p.life = 1.5 + Math.random() * 1.0;
-                    p.age = 0;
-                    p.color = color;
-                    p.history = [];
-                    
-                    const speed = v0 * PPM;
-                    const angle = Math.random() * Math.PI * 2;
-                    let spread = 0.15 + Math.random() * 0.1;
-                    
-                    if (state.flowType.includes('swirl')) spread = 0.5 + Math.random() * 0.5;
-                    
-                    p.vx = Math.cos(angle) * speed * spread;
-                    p.vz = Math.sin(angle) * speed * spread;
-                    p.vy = -speed; // Down
+                ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+        }
 
-                    if (state.flowType.includes('swirl')) {
-                        const swirlStr = 0.3;
-                        p.vx += Math.sin(angle) * speed * swirlStr;
-                        p.vz += -Math.cos(angle) * speed * swirlStr;
-                        p.vy *= 0.6;
-                    }
+        const pool = particlesRef.current;
+        const dt = CONSTANTS.BASE_TIME_STEP;
 
-                    spawned++;
-                }
-
-                if (p.active) {
-                    p.history.push({x: p.x, y: p.y, z: p.z});
-                    if (p.history.length > CONSTANTS.HISTORY_LENGTH) p.history.shift();
-
-                    p.x += p.vx * dt;
-                    p.y += p.vy * dt;
-                    p.z += p.vz * dt;
-                    p.vy += buoyancy * dt;
-
-                    // Swirl effect
-                    if (state.flowType.includes('swirl')) {
-                        const rot = 1.5 * dt;
-                        const nx = p.x * Math.cos(rot) - p.z * Math.sin(rot);
-                        const nz = p.x * Math.sin(rot) + p.z * Math.cos(rot);
-                        p.x = nx; p.z = nz;
-                    }
-
-                    p.vx *= 0.96; p.vz *= 0.96; p.vy *= 0.98;
-                    p.age += dt;
-
-                    if (p.y < 0) {
-                        p.y = 0; p.vy = 0;
-                        p.vx *= 0.8; p.vz *= 0.8;
-                    }
-                    if (p.age > p.life) p.active = false;
+        if (isPowerOn && isPlaying && !state.physics.error) {
+            const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+            let spawnedCount = 0;
+            for (let i = 0; i < pool.length; i++) {
+                if (!pool[i].active) {
+                    spawnParticle(pool[i], state, PPM);
+                    spawnedCount++;
+                    if (spawnedCount >= spawnRate) break;
                 }
             }
         }
 
-        // --- RENDER PARTICLES ---
+        const batches: Record<string, Particle3D[]> = {};
+        const QUANTIZE = 10;
+
+        for (let i = 0; i < pool.length; i++) {
+            const p = pool[i];
+            if (!p.active) continue;
+
+            if (isPowerOn && isPlaying) {
+                p.age += dt;
+                
+                if (p.age > p.life || p.y < 0 || p.y > rh || Math.abs(p.x) > rw/2 || Math.abs(p.z) > rl/2) {
+                    p.active = false;
+                    continue;
+                }
+
+                if (p.isSuction) {
+                    const dx = 0 - p.x;
+                    const dy = diffY - p.y;
+                    const dz = 0 - p.z;
+                    const dSq = dx*dx + dy*dy + dz*dz;
+                    const dist = Math.sqrt(dSq);
+                    if (dist < 20) { p.active = false; continue; }
+                    const force = ((state.physics.v0 || 0) * 2000) / (dSq + 100);
+                    p.vx += (dx/dist)*force*dt;
+                    p.vy += (dy/dist)*force*dt;
+                    p.vz += (dz/dist)*force*dt;
+                    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+                } else {
+                    p.vy += p.buoyancy * dt; 
+                    p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
+                    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+                }
+
+                if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
+                    if (p.history.length > 20) p.history.shift();
+                    p.history.push({ x: p.x, y: p.y, z: p.z, age: p.age });
+                    p.lastHistoryTime = p.age;
+                }
+            }
+
+            if (p.history.length > 1) {
+                const rawAlpha = (1 - p.age/p.life) * 0.5;
+                const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
+                if (alpha <= 0) continue;
+                const key = `${p.color}|${alpha}`;
+                if (!batches[key]) batches[key] = [];
+                batches[key].push(p);
+            }
+        }
+
         ctx.globalCompositeOperation = 'screen';
         ctx.lineCap = 'round';
 
-        const activeParticles = particlesRef.current.filter(p => p.active && p.history.length > 1);
-        // Simple Z-sort
-        activeParticles.sort((a, b) => {
-            // Sort by current Z distance to camera
-            const pa = proj({x: a.x, y: a.y, z: a.z});
-            const pb = proj({x: b.x, y: b.y, z: b.z});
-            return pb.z - pa.z; 
-        });
-
-        for (const p of activeParticles) {
-            const alpha = Math.max(0, 1 - p.age / p.life);
+        for (const key in batches) {
+            const [color, alphaStr] = key.split('|');
+            ctx.strokeStyle = `rgba(${color}, ${alphaStr})`;
+            ctx.lineWidth = 1.5; 
             ctx.beginPath();
-            
-            // Draw Trail
-            let started = false;
-            for (const h of p.history) {
-                const pp = proj(h);
-                if (pp.s <= 0) continue; // Clipped
-                if (!started) { ctx.moveTo(pp.x, pp.y); started = true; }
-                else ctx.lineTo(pp.x, pp.y);
+
+            const group = batches[key];
+            for (let k = 0; k < group.length; k++) {
+                const p = group[k];
+                const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
+                
+                let wx = 0, wy = 0, wz = 0;
+                if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
+                    wx = waveVal * Math.cos(p.wavePhase); 
+                    wz = waveVal * Math.sin(p.wavePhase);
+                } else {
+                    wy = waveVal;
+                }
+                if (p.isSuction) { wx=0; wy=0; wz=0; }
+
+                const cur = p3d(p.x + wx, p.y + wy, p.z + wz);
+                if (cur.s <= 0) continue;
+
+                ctx.moveTo(cur.x, cur.y);
+
+                for (let j = p.history.length - 1; j >= 0; j--) {
+                    const h = p.history[j];
+                    const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
+                    let hwx = 0, hwy = 0, hwz = 0;
+                    if (Math.abs(p.vy) > Math.abs(p.vx) + Math.abs(p.vz)) {
+                        hwx = hWave * Math.cos(p.wavePhase);
+                        hwz = hWave * Math.sin(p.wavePhase);
+                    } else {
+                        hwy = hWave;
+                    }
+                    if (p.isSuction) { hwx=0; hwy=0; hwz=0; }
+
+                    const prev = p3d(h.x + hwx, h.y + hwy, h.z + hwz);
+                    ctx.lineTo(prev.x, prev.y);
+                }
             }
-            
-            const cur = proj({x: p.x, y: p.y, z: p.z});
-            if (started && cur.s > 0) {
-                ctx.lineTo(cur.x, cur.y);
-                ctx.strokeStyle = `rgba(${p.color}, ${alpha * 0.7})`;
-                ctx.lineWidth = Math.max(1, 2 * cur.s); 
-                ctx.stroke();
-            }
+            ctx.stroke();
         }
 
         ctx.globalCompositeOperation = 'source-over';
-
-        // Draw Work Zone
-        const wzY = workZoneHeight * PPM;
-        if (wzY < rh) {
-            const wzCorners = [
-                {x: -rw/2, y: wzY, z: -rl/2}, {x: rw/2, y: wzY, z: -rl/2},
-                {x: rw/2, y: wzY, z: rl/2}, {x: -rw/2, y: wzY, z: rl/2}
-            ].map(proj);
-
-            ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
-            ctx.beginPath();
-            ctx.moveTo(wzCorners[0].x, wzCorners[0].y);
-            ctx.lineTo(wzCorners[1].x, wzCorners[1].y);
-            ctx.lineTo(wzCorners[2].x, wzCorners[2].y);
-            ctx.lineTo(wzCorners[3].x, wzCorners[3].y);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            
-            ctx.fillStyle = 'rgba(255, 200, 0, 0.8)';
-            ctx.font = '10px Inter';
-            ctx.fillText(`РАБОЧАЯ ЗОНА (${workZoneHeight}м)`, wzCorners[3].x + 10, wzCorners[3].y);
-        }
-
-        // HUD
+        
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.font = '10px Inter';
-        ctx.fillText(`ЛКМ: Вращение | ПКМ/Shift: Сдвиг | Колесо: Зум`, 20, height - 20);
+        ctx.fillText(`ЛКМ: Вращение | ПКМ: Сдвиг | Колесо: Зум`, 20, height - 20);
 
         requestRef.current = requestAnimationFrame(animate);
     }, [camera]);
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(requestRef.current);
+        return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
     }, [animate]);
 
     return (
-        <canvas 
-            ref={canvasRef} 
-            width={props.width} 
-            height={props.height} 
-            className="block w-full h-full cursor-move touch-none"
-            onMouseDown={handleStart}
-            onMouseMove={handleMove}
-            onMouseUp={handleEnd}
-            onMouseLeave={handleEnd}
-            onWheel={handleWheel}
-            onTouchStart={handleStart}
-            onTouchMove={handleMove}
-            onTouchEnd={handleEnd}
-        />
+        <div className="relative w-full h-full">
+            <ViewCube rotX={camera.rotX} rotY={camera.rotY} setCamera={setCamera} />
+            <canvas 
+                ref={canvasRef} 
+                width={props.width} 
+                height={props.height} 
+                className="block w-full h-full cursor-move touch-none"
+                onMouseDown={handleStart}
+                onMouseMove={handleMove}
+                onMouseUp={handleEnd}
+                onMouseLeave={handleEnd}
+                onWheel={handleWheel}
+                onTouchStart={handleStart}
+                onTouchMove={handleMove}
+                onTouchEnd={handleEnd}
+            />
+        </div>
     );
 };
 
