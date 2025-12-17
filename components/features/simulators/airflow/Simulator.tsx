@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, Frame
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
@@ -24,6 +24,11 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
     const [openSection, setOpenSection] = useState<string | null>('distributor');
+    
+    // New Single Mode State
+    const [isSingleMode, setIsSingleMode] = useState(false);
+    // New Show Room State (for 3D)
+    const [showRoom, setShowRoom] = useState(true);
 
     // Simulation Data
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
@@ -144,11 +149,13 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     // Stable handlers
     const removeDiffuser = useCallback((id: string) => { 
+        if (isSingleMode) return; // Cannot remove the last one in single mode typically, or handled by mode switch
         setPlacedDiffusers(prev => prev.filter(d => d.id !== id)); 
         if (selectedDiffuserId === id) setSelectedDiffuserId(null); 
-    }, [selectedDiffuserId]);
+    }, [selectedDiffuserId, isSingleMode]);
 
     const duplicateDiffuser = useCallback((id: string) => {
+        if (isSingleMode) return; // No duplication in single mode
         const original = placedDiffusers.find(d => d.id === id);
         if (!original) return;
         const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
@@ -165,21 +172,42 @@ const Simulator = ({ onBack, onHome }: any) => {
         };
         setPlacedDiffusers(prev => [...prev, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
-    }, [placedDiffusers, params.roomWidth, params.roomLength]);
+    }, [placedDiffusers, params.roomWidth, params.roomLength, isSingleMode]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (viewMode !== 'top') return;
-            if (e.key === 'Delete' && selectedDiffuserId) { e.preventDefault(); removeDiffuser(selectedDiffuserId); }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedDiffuserId) { e.preventDefault(); duplicateDiffuser(selectedDiffuserId); }
+            if (e.key === 'Delete' && selectedDiffuserId && !isSingleMode) { e.preventDefault(); removeDiffuser(selectedDiffuserId); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'd' && selectedDiffuserId && !isSingleMode) { e.preventDefault(); duplicateDiffuser(selectedDiffuserId); }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [viewMode, selectedDiffuserId, removeDiffuser, duplicateDiffuser]);
+    }, [viewMode, selectedDiffuserId, removeDiffuser, duplicateDiffuser, isSingleMode]);
 
     // --- LOGIC ---
     const toggleSection = (id: string) => setOpenSection(prev => prev === id ? null : id);
     const togglePower = () => { setIsPowerOn(!isPowerOn); setIsPlaying(true); };
+
+    // Toggle Single Mode
+    const toggleSingleMode = () => {
+        const nextMode = !isSingleMode;
+        setIsSingleMode(nextMode);
+        
+        if (nextMode) {
+            // Keep only the selected diffuser (or first), and center it
+            const survivorId = selectedDiffuserId || (placedDiffusers.length > 0 ? placedDiffusers[0].id : null);
+            
+            if (survivorId) {
+                const survivor = placedDiffusers.find(d => d.id === survivorId)!;
+                const centered = { ...survivor, x: params.roomWidth / 2, y: params.roomLength / 2 };
+                setPlacedDiffusers([centered]);
+                setSelectedDiffuserId(centered.id);
+            } else {
+                // If somehow empty, create one
+                addDiffuserToPlan();
+            }
+        }
+    };
 
     const topViewStats = useMemo(() => {
         if (placedDiffusers.length === 0) return { maxNoise: 0, calcTemp: params.roomTemp };
@@ -252,7 +280,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     };
 
     const addDiffuserToPlan = () => {
-        if (!sizeSelected || physics.error) return;
+        if (!sizeSelected || physics.error || isSingleMode) return;
         const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
         const newDiffuser: PlacedDiffuser = {
             id: `d-${Date.now()}`, index: nextIndex, x: params.roomWidth / 2, y: params.roomLength / 2,
@@ -295,6 +323,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={addDiffuserToPlan}
+                isSingleMode={isSingleMode}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
@@ -325,12 +354,17 @@ const Simulator = ({ onBack, onHome }: any) => {
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
+                        showRoom={showRoom}
                     />
                 </div>
                 
                  {/* FLOATING "ISLAND" BAR (Controls) */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
                     <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-white/80 dark:bg-[#0f1014]/90 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
+                         
+                         {/* Single Mode Toggle */}
+                         <button onClick={toggleSingleMode} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${isSingleMode ? 'bg-orange-500 text-white shadow-[0_4px_20px_rgba(249,115,22,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Square size={16}/><span>Один</span></button>
+
                          <button onClick={() => setViewMode('side')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
                         
                         {viewMode === 'side' && (
@@ -356,7 +390,12 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <button onClick={() => setViewMode('3d')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === '3d' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Box size={16}/><span>3D</span></button>
                         
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
-                        <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                        
+                        {viewMode === '3d' ? (
+                            <button onClick={() => setShowRoom(!showRoom)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showRoom ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Помещение"><Frame size={18} /></button>
+                        ) : (
+                            <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                        )}
                         
                         {viewMode === 'top' && (
                             <>

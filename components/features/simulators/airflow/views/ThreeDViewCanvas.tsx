@@ -6,6 +6,7 @@ import { PlacedDiffuser } from '../../../../../types';
 interface ExtendedThreeDProps extends ThreeDViewCanvasProps {
     placedDiffusers?: PlacedDiffuser[];
     selectedDiffuserId?: string | null;
+    showRoom?: boolean;
 }
 
 const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
@@ -174,40 +175,42 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
         const p3d = (x: number, y: number, z: number) => 
             project(x, -(y + yOffset), z, width, height, camera.rotX, camera.rotY, finalScale, camera.panX, camera.panY);
 
-        // --- DRAW ROOM (Always visible) ---
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.lineWidth = 1;
-        const corners = [
-            {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2},
-            {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}
-        ].map(v => p3d(v.x, v.y, v.z));
-
-        ctx.beginPath();
-        [0,4].forEach(start => {
-            ctx.moveTo(corners[start].x, corners[start].y);
-            ctx.lineTo(corners[start+1].x, corners[start+1].y);
-            ctx.lineTo(corners[start+2].x, corners[start+2].y);
-            ctx.lineTo(corners[start+3].x, corners[start+3].y);
-            ctx.closePath();
-        });
-        [0,1,2,3].forEach(i => {
-            ctx.moveTo(corners[i].x, corners[i].y);
-            ctx.lineTo(corners[i+4].x, corners[i+4].y);
-        });
-        ctx.stroke();
-
-        if (workZoneHeight > 0) {
-            const wy = workZoneHeight * PPM;
-            const wc = [
-                {x: -rw/2, y: wy, z: -rl/2}, {x: rw/2, y: wy, z: -rl/2},
-                {x: rw/2, y: wy, z: rl/2}, {x: -rw/2, y: wy, z: rl/2}
+        // --- DRAW ROOM ---
+        if (state.showRoom !== false) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            const corners = [
+                {x: -rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: -rl/2}, {x: rw/2, y: 0, z: rl/2}, {x: -rw/2, y: 0, z: rl/2},
+                {x: -rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: -rl/2}, {x: rw/2, y: rh, z: rl/2}, {x: -rw/2, y: rh, z: rl/2}
             ].map(v => p3d(v.x, v.y, v.z));
-            
-            ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
-            ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+
             ctx.beginPath();
-            ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
-            ctx.closePath(); ctx.fill(); ctx.stroke();
+            [0,4].forEach(start => {
+                ctx.moveTo(corners[start].x, corners[start].y);
+                ctx.lineTo(corners[start+1].x, corners[start+1].y);
+                ctx.lineTo(corners[start+2].x, corners[start+2].y);
+                ctx.lineTo(corners[start+3].x, corners[start+3].y);
+                ctx.closePath();
+            });
+            [0,1,2,3].forEach(i => {
+                ctx.moveTo(corners[i].x, corners[i].y);
+                ctx.lineTo(corners[i+4].x, corners[i+4].y);
+            });
+            ctx.stroke();
+
+            if (workZoneHeight > 0) {
+                const wy = workZoneHeight * PPM;
+                const wc = [
+                    {x: -rw/2, y: wy, z: -rl/2}, {x: rw/2, y: wy, z: -rl/2},
+                    {x: rw/2, y: wy, z: rl/2}, {x: -rw/2, y: wy, z: rl/2}
+                ].map(v => p3d(v.x, v.y, v.z));
+                
+                ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
+                ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
         }
 
         // --- DRAW DIFFUSERS ---
@@ -226,7 +229,7 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
                 ctx.fill();
                 
                 // Stem to ceiling if suspended
-                if (diffuserHeight < roomHeight) {
+                if (diffuserHeight < roomHeight && state.showRoom !== false) {
                     const ceilP = p3d(x3d, rh, z3d);
                     ctx.beginPath();
                     ctx.strokeStyle = 'rgba(255,255,255,0.2)';

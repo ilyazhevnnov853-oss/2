@@ -13,7 +13,7 @@ export const SimulatorLeftPanel = ({
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
-    onAddDiffuser
+    onAddDiffuser, isSingleMode
 }: any) => {
 
     const handleModelChange = (id: string) => {
@@ -185,7 +185,7 @@ export const SimulatorLeftPanel = ({
                     <div className="p-5 bg-white/60 dark:bg-[#050508]/60 border-t border-black/5 dark:border-white/5 backdrop-blur-xl absolute bottom-0 left-0 right-0 lg:relative">
                             <div className="grid grid-cols-2 gap-3">
                             <GlassButton onClick={togglePower} active={isPowerOn} icon={<Power size={18} />} label={isPowerOn ? "Стоп" : "Старт"} customClass={`${isPowerOn ? "bg-red-500 text-white shadow-lg shadow-red-500/30 border border-red-400/50" : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border border-emerald-400/50"}`}/>
-                            {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} />}
+                            {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error || isSingleMode} />}
                                 {viewMode === 'side' && <GlassButton onClick={() => setIsPlaying(!isPlaying)} icon={isPlaying ? <Pause size={18}/> : <Play size={18}/>} secondary={true} disabled={!isPowerOn} />}
                             </div>
                     </div>

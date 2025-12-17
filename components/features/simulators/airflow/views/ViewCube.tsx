@@ -17,8 +17,6 @@ const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
     const edgeThickness = 16;
     
     // Invert rotations for CSS visual matching with Canvas projection
-    // Canvas RotY is Azimuth (Orbit around Y). CSS rotateY is similar but often inverted depending on the engine.
-    // Here we match the previous logic: rX = rotX, rY = -rotY
     const rX = rotX * (180 / Math.PI);
     const rY = -rotY * (180 / Math.PI); 
 
@@ -50,11 +48,11 @@ const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
 
         if (isDragging || Math.abs(dx) > 2 || Math.abs(dy) > 2) {
             // Calculate new rotation
-            // Sensitivity 0.005 is typical for 1px movement
             const newRotY = rotY + dx * 0.005;
             const newRotX = Math.max(-1.5, Math.min(1.5, rotX + dy * 0.005));
             
-            onViewChange(newRotX, newRotY, false); // False = Instant (no smoothing)
+            // Instant update during drag
+            onViewChange(newRotX, newRotY, false); 
             
             lastMouse.current = { x: e.clientX, y: e.clientY };
         }
@@ -63,13 +61,14 @@ const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
     const handleMouseUp = () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
-        // Small delay to prevent click events firing after a drag
         setTimeout(() => setIsDragging(false), 50);
     };
 
     // Styles
-    const faceClass = "absolute inset-0 flex items-center justify-center border border-slate-400/20 bg-[#f0f2f5] text-[10px] font-bold text-slate-500 hover:bg-[#dbeafe] hover:text-blue-600 transition-colors cursor-pointer select-none uppercase shadow-sm opacity-90 hover:opacity-100";
-    const highlightClass = "absolute bg-transparent hover:bg-blue-500/60 cursor-pointer z-50 transition-colors";
+    const faceClass = "absolute inset-0 flex items-center justify-center border border-slate-400/20 bg-[#f0f2f5] text-[10px] font-bold text-slate-500 hover:bg-[#dbeafe] hover:text-blue-600 transition-colors cursor-pointer select-none uppercase shadow-sm opacity-90 hover:opacity-100 backface-hidden";
+    
+    // Interactive Zones (Corners/Edges) - Enhanced hover effects
+    const highlightClass = "absolute bg-transparent hover:bg-blue-500/80 hover:border-2 hover:border-white/80 hover:shadow-[0_0_15px_rgba(59,130,246,0.8)] cursor-pointer z-50 transition-all duration-200 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-sm backdrop-blur-[1px]";
 
     // Isometric Angle (approx 35.264 degrees elevation)
     const isoX = Math.atan(1 / Math.sqrt(2));
@@ -96,7 +95,8 @@ const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
                 style={{ 
                     transformStyle: 'preserve-3d', 
                     transform: `rotateX(${rX}deg) rotateY(${rY}deg)`,
-                    transition: isDragging ? 'none' : 'transform 0.1s linear' // CSS transition mainly for slight smoothing, logic handles the rest
+                    // Disable CSS transition to prevent jitter during JS-driven animation (Lerp)
+                    transition: 'none'
                 }}
             >
                 {/* --- FACES (6) --- */}
@@ -109,29 +109,35 @@ const ViewCube = ({ rotX, rotY, onViewChange }: ViewCubeProps) => {
 
                 {/* --- CORNERS (8) --- */}
                 {/* Top Corners */}
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${-offset+cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(isoX, -iso45, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${-offset+cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(isoX, iso45, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${-offset+cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(isoX, -iso45 - Math.PI/2, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${-offset+cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(isoX, iso45 + Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset}px, ${-offset}px, ${offset}px)` }} onClick={(e) => snap(isoX, -iso45, e)} title="Top Front Right" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset}px, ${-offset}px, ${offset}px)` }} onClick={(e) => snap(isoX, iso45, e)} title="Top Front Left" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset}px, ${-offset}px, ${-offset}px)` }} onClick={(e) => snap(isoX, -iso45 - Math.PI/2, e)} title="Top Back Right" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset}px, ${-offset}px, ${-offset}px)` }} onClick={(e) => snap(isoX, iso45 + Math.PI/2, e)} title="Top Back Left" />
                 
                 {/* Bottom Corners */}
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${offset-cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(-isoX, -iso45, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${offset-cornerSize/2}px, ${offset}px)` }} onClick={(e) => snap(-isoX, iso45, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset-cornerSize/2}px, ${offset-cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, -iso45 - Math.PI/2, e)} />
-                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset+cornerSize/2}px, ${offset-cornerSize/2}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, iso45 + Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset}px, ${offset}px, ${offset}px)` }} onClick={(e) => snap(-isoX, -iso45, e)} title="Bottom Front Right" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset}px, ${offset}px, ${offset}px)` }} onClick={(e) => snap(-isoX, iso45, e)} title="Bottom Front Left" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${offset}px, ${offset}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, -iso45 - Math.PI/2, e)} title="Bottom Back Right" />
+                <div className={highlightClass} style={{ width: cornerSize, height: cornerSize, transform: `translate3d(${-offset}px, ${offset}px, ${-offset}px)` }} onClick={(e) => snap(-isoX, iso45 + Math.PI/2, e)} title="Bottom Back Left" />
 
                 {/* --- EDGES (12) --- */}
-                {/* Top Edges */}
-                <div className={highlightClass} style={{ width: size-cornerSize, height: edgeThickness, transform: `rotateX(90deg) translate3d(0, ${-offset}px, ${offset}px)` }} onClick={(e) => snap(iso45, 0, e)} />
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `rotateY(90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={(e) => snap(iso45, -Math.PI/2, e)} />
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `rotateY(-90deg) translate3d(0, ${-offset+size/2}px, ${offset}px)` }} onClick={(e) => snap(iso45, Math.PI/2, e)} />
-                <div className={highlightClass} style={{ width: size-cornerSize, height: edgeThickness, transform: `rotateX(-90deg) translate3d(0, ${-offset}px, ${-offset}px)` }} onClick={(e) => snap(iso45, Math.PI, e)} />
+                {/* Top Edges Ring */}
+                <div className={highlightClass} style={{ width: size - cornerSize, height: edgeThickness, transform: `translate3d(0, ${-offset}px, ${offset}px) rotateX(45deg)` }} onClick={(e) => snap(iso45, 0, e)} title="Top Front" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${offset}px, ${-offset}px, 0) rotateZ(45deg) rotateY(90deg)` }} onClick={(e) => snap(iso45, -Math.PI/2, e)} title="Top Right" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${-offset}px, ${-offset}px, 0) rotateZ(-45deg) rotateY(90deg)` }} onClick={(e) => snap(iso45, Math.PI/2, e)} title="Top Left" />
+                <div className={highlightClass} style={{ width: size - cornerSize, height: edgeThickness, transform: `translate3d(0, ${-offset}px, ${-offset}px) rotateX(-45deg)` }} onClick={(e) => snap(iso45, Math.PI, e)} title="Top Back" />
+
+                {/* Bottom Edges Ring */}
+                <div className={highlightClass} style={{ width: size - cornerSize, height: edgeThickness, transform: `translate3d(0, ${offset}px, ${offset}px) rotateX(-45deg)` }} onClick={(e) => snap(-iso45, 0, e)} title="Bottom Front" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${offset}px, ${offset}px, 0) rotateZ(-45deg) rotateY(90deg)` }} onClick={(e) => snap(-iso45, -Math.PI/2, e)} title="Bottom Right" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${-offset}px, ${offset}px, 0) rotateZ(45deg) rotateY(90deg)` }} onClick={(e) => snap(-iso45, Math.PI/2, e)} title="Bottom Left" />
+                <div className={highlightClass} style={{ width: size - cornerSize, height: edgeThickness, transform: `translate3d(0, ${offset}px, ${-offset}px) rotateX(45deg)` }} onClick={(e) => snap(-iso45, Math.PI, e)} title="Bottom Back" />
 
                 {/* Vertical Edges */}
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${offset}px, 0, ${offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, -iso45, e)} />
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${-offset}px, 0, ${offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, iso45, e)} />
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${offset}px, 0, ${-offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, -iso45 - Math.PI/2, e)} />
-                <div className={highlightClass} style={{ width: edgeThickness, height: size-cornerSize, transform: `translate3d(${-offset}px, 0, ${-offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, iso45 + Math.PI/2, e)} />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${offset}px, 0, ${offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, -iso45, e)} title="Front Right" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${-offset}px, 0, ${offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, iso45, e)} title="Front Left" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${offset}px, 0, ${-offset}px) rotateY(45deg)` }} onClick={(e) => snap(0, -iso45 - Math.PI/2, e)} title="Back Right" />
+                <div className={highlightClass} style={{ width: edgeThickness, height: size - cornerSize, transform: `translate3d(${-offset}px, 0, ${-offset}px) rotateY(-45deg)` }} onClick={(e) => snap(0, iso45 + Math.PI/2, e)} title="Back Left" />
 
             </div>
         </div>

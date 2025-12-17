@@ -36,6 +36,7 @@ interface DiffuserCanvasProps {
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
+  showRoom?: boolean;
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -85,6 +86,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 workZoneHeight={props.workZoneHeight}
                 placedDiffusers={props.placedDiffusers}
                 selectedDiffuserId={props.selectedDiffuserId}
+                showRoom={props.showRoom}
             />
         );
     }
