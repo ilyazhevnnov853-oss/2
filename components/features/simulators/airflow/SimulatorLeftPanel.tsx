@@ -184,7 +184,7 @@ export const SimulatorLeftPanel = ({
                             <div className="grid grid-cols-2 gap-3">
                             <GlassButton onClick={togglePower} active={isPowerOn} icon={<Power size={18} />} label={isPowerOn ? "Стоп" : "Старт"} customClass={`${isPowerOn ? "bg-red-500 text-white shadow-lg shadow-red-500/30 border border-red-400/50" : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border border-emerald-400/50"}`}/>
                             {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} />}
-                                {viewMode === 'side' && <GlassButton onClick={() => setIsPlaying(!isPlaying)} icon={isPlaying ? <Pause size={18}/> : <Play size={18}/>} secondary={true} disabled={!isPowerOn} />}
+                                {viewMode === 'side' && <GlassButton onClick={() => setIsPlaying(!isPlaying)} icon={isPlaying ? <Pause size={18}/> : <Play size={18}/>} ariaLabel={isPlaying ? "Пауза" : "Воспроизвести"} secondary={true} disabled={!isPowerOn} />}
                             </div>
                     </div>
                 </div>
