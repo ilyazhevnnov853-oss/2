@@ -1,7 +1,6 @@
-
 import { useMemo } from 'react';
 import { SPECS, ENGINEERING_DATA } from '../constants';
-import { PerformanceResult, Spec, PlacedDiffuser } from '../types';
+import { PerformanceResult, Spec } from '../types';
 
 // ==========================================
 // 4. PHYSICS & SIMULATION LOGIC
@@ -12,103 +11,61 @@ export const interpolate = (val: number, x0: number, x1: number, y0: number, y1:
     return y0 + ((val - x0) * (y1 - y0)) / (x1 - x0);
 };
 
-// --- ENGINEERING CALCULATIONS ---
-
-/**
- * Calculates velocity in the occupied zone (Work Zone) using jet theory.
- * Includes corrections for:
- * - Coanda Effect (Surface attachment)
- * - Archimedes Number (Buoyancy/Non-isothermal effects)
- * - Trajectory Path Length (Horizontal throw + Vertical drop)
- */
+// --- ГЛАВНАЯ ФУНКЦИЯ РАСЧЕТА СКОРОСТИ ---
+// Теперь принимает buoyancyFactor, чтобы температура влияла на результат
 export const calculateWorkzoneVelocityAndCoverage = (
     v0: number, 
-    spec_A_mm2: number, // Ak (Effective Area) in mm²
+    spec_A: number, // Ak (Effective Area) in mm²
     diffuserHeight: number, 
     workZoneHeight: number,
-    isCeilingMounted: boolean,
-    flowType: string,
-    dt: number, // T_supply - T_room
-    roomWidth: number = 5
+    m: number = 2.0, // Аэродинамический коэффициент формы
+    buoyancyFactor: number = 1.0 // <--- НОВЫЙ ПАРАМЕТР: Влияние температуры
 ) => {
-    // 1. Constants & Geometry
-    const Ak_m2 = spec_A_mm2 / 1e6; // m²
-    const D_eq = Math.sqrt((4 * Ak_m2) / Math.PI); // Equivalent diameter
-    const g = 9.81;
-    const beta = 1 / 293; // Thermal expansion coeff (approx at 20°C)
-
-    // 2. Archimedes Number (Ar)
-    // Characterizes the ratio of buoyant forces to inertial forces.
-    // Ar > 0: Heating (Lift), Ar < 0: Cooling (Drop) (assuming dt = T_sup - T_room)
-    // Note: Standard Ar def uses abs(dt), sign handled by logic.
-    const Ar = v0 > 0.05 ? (g * beta * dt * Math.sqrt(Ak_m2)) / (v0 * v0) : 0;
-
-    // 3. Decay Constant (K)
-    // Standard compact jet K ~ 5.0. 
-    // Coanda Effect: Jet attaches to ceiling, entrainment is restricted (half-jet), 
-    // resulting in slower velocity decay (longer throw).
-    // K_coanda ≈ K_free * sqrt(2) ≈ 1.4 * K_free.
-    let K = 5.0; 
-    const isHorizontal = flowType.includes('horizontal') || flowType.includes('4-way') || flowType.includes('swirl');
+    const dist = diffuserHeight - workZoneHeight;
     
-    if (isCeilingMounted && isHorizontal) {
-        K = 7.0; // Confinement coefficient applied
+    // Переводим площадь в метры для физики
+    const Ak_m2 = spec_A > 0 ? spec_A / 1000000 : 0; 
+    const l0 = Math.sqrt(Ak_m2); 
+    const coreZone = 5 * l0; 
+
+    // Если мы прямо в диффузоре
+    if (dist <= 0) {
+        const initialRadius = Math.sqrt(spec_A) / 2000.0;
+        return { workzoneVelocity: v0, coverageRadius: initialRadius };
     }
 
-    // 4. Trajectory & Path Length (L)
-    const verticalDist = Math.max(0.1, diffuserHeight - workZoneHeight);
-    let L = verticalDist;
-
-    if (isHorizontal) {
-        // Path = Horizontal Run + Vertical Drop
-        // The horizontal distance the jet travels before turning into the work zone
-        // is dependent on buoyancy (Ar) and room geometry.
-        
-        let horizontalRun = roomWidth / 3.0; // Characteristic length to occupied zone
-
-        if (Ar < -0.001) {
-            // Cooling: Jet drops due to negative buoyancy.
-            // Separation distance x_s is proportional to Ar^-1/3.
-            // Strong cooling (large neg Ar) -> Short horizontal run.
-            const dropFactor = Math.min(1.0, 0.15 / Math.abs(Ar)); 
-            horizontalRun *= dropFactor;
-        } else if (Ar > 0.001) {
-            // Heating: Jet lifts/sticks to ceiling.
-            // Path length effectively increases as it overshoots or mixes at ceiling.
-            horizontalRun *= 1.5;
-        }
-
-        // Total streamlines path length approximation
-        L = horizontalRun + verticalDist;
+    let vx = v0;
+    
+    if (dist < coreZone) {
+        // Зона 1: Скорость постоянна
+        vx = v0;
     } else {
-        // Vertical Jet
-        // If Heating (Ar > 0): Jet fights buoyancy, velocity decays faster.
-        // If Cooling (Ar < 0): Jet accelerates/maintains velocity due to gravity.
-        if (Ar > 0) L *= 1.4; // Effective path longer (more decay)
-        if (Ar < 0) L *= 0.8; // Effective path shorter (less decay/acceleration)
+        // Зона 3: Гиперболическое затухание Vx = (m * V0 * sqrt(Ak)) / x
+        if (dist > 0) {
+            vx = (m * v0 * l0) / dist;
+        }
     }
 
-    // 5. Centerline Velocity Decay
-    // Formula: V(x) = K * (V0 * sqrt(Ak) / x)
-    let vx = (K * v0 * Math.sqrt(Ak_m2)) / Math.max(0.5, L);
+    // --- ПРИМЕНЯЕМ ВЛИЯНИЕ ТЕМПЕРАТУРЫ ---
+    // Здесь мы замыкаем круг: Температура -> Ar -> buoyancyFactor -> Скорость
+    vx = vx * buoyancyFactor;
 
-    // 6. Limits
-    vx = Math.min(vx, v0); // Conservation of energy (simplified)
-    vx = Math.max(0.05, vx); // Minimum air movement
+    // Физические ограничения (скорость не может быть отрицательной)
+    // Разрешаем скорости расти выше v0 в случае сильного "падения" холодного воздуха
+    vx = Math.max(0.05, vx); 
 
-    // 7. Coverage Radius
-    // Based on jet spreading angle α ≈ 22°. tan(11°) ≈ 0.2.
-    // r = distance * 0.2
-    const coverageRadius = L * 0.22;
-
-    return { workzoneVelocity: vx, coverageRadius, Ar };
+    // Расчет радиуса (линейное расширение)
+    const initialRadius = Math.sqrt(spec_A) / 2000.0; 
+    const coverageRadius = initialRadius + dist * 0.2; 
+    
+    return { workzoneVelocity: vx, coverageRadius };
 };
 
 export const calculatePerformance = (modelId: string, flowType: string, diameter: string | number, volume: number): Partial<PerformanceResult> | null => {
     const spec = SPECS[diameter];
     if (!spec) return null;
 
-    // Constraints
+    // Исключения для несовместимых моделей
     if (modelId === 'dpu-s' && diameter === 100) return null;
     if (modelId === 'dpu-v' && diameter === 250) return null;
     if ((modelId === 'amn-adn' || modelId === '4ap') && typeof diameter === 'number') return null;
@@ -124,7 +81,7 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         return null;
     }
     
-    // Linear Interpolation
+    // Интерполяция табличных данных
     let pressure = 0, noise = 0, throwDist = 0;
     if (modePoints.length > 0) {
         let p1 = modePoints[0];
@@ -143,7 +100,7 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         throwDist = interpolate(volume, p1.vol, p2.vol, p1.throw, p2.throw);
     }
 
-    // Initial Velocity V0 calculation based on Effective Area (f0)
+    // Расчет начальной скорости V0 через эффективное сечение
     const Ak = spec.f0; 
     const v0 = Ak > 0 ? volume / (3600 * Ak) : 0;
 
@@ -162,8 +119,7 @@ export const useScientificSimulation = (
     temp: number, 
     roomTemp: number, 
     diffuserHeight: number, 
-    workZoneHeight: number,
-    roomWidth: number = 5 // Added for path calc
+    workZoneHeight: number
 ): PerformanceResult => {
     return useMemo(() => {
         const perf = calculatePerformance(modelId, flowType, diameter, volume);
@@ -176,52 +132,79 @@ export const useScientificSimulation = (
             workzoneVelocity: 0, coverageRadius: 0, Ar: 0
         };
 
-        const dt = temp - roomTemp;
-        const Ak_mm2 = perf.spec.f0 * 1e6;
+        const { v0 = 0, pressure = 0, noise = 0, throwDist = 0, spec } = perf;
+
+        // --- ФИЗИЧЕСКИЙ ДВИЖОК ---
         
-        // Calculate Physics-Based Velocity in Work Zone
-        const { workzoneVelocity, coverageRadius, Ar } = calculateWorkzoneVelocityAndCoverage(
-            perf.v0 || 0,
-            Ak_mm2,
-            diffuserHeight,
+        const g = 9.81;
+        // Перевод температур в Кельвины для расчета плотности
+        const T_ref = 273.15 + roomTemp; 
+        const beta = 1 / T_ref; // Коэффициент объемного расширения
+        const dt = temp - roomTemp; // Разница температур (Приток - Комната)
+        const l0 = Math.sqrt(spec.f0); // Характерный размер
+
+        // 1. Число Архимеда (Ar)
+        // Характеризует борьбу инерции (v0) и плавучести (dt)
+        const Ar = v0 > 0.1 
+            ? (g * beta * dt * l0) / (v0 * v0) 
+            : 0;
+
+        // 2. Коэффициент влияния Архимеда (k_archimedes)
+        // Этот коэффициент показывает, как меняется импульс струи из-за температуры
+        let k_archimedes = 1.0;
+        
+        // --- УСИЛЕНИЕ ЭФФЕКТА (GAIN) ---
+        // Реальный Ar очень мал (~0.001). Чтобы пользователь увидел эффект в UI,
+        // мы применяем коэффициент усиления.
+        // VISUAL_GAIN = 15.0 (вместо теоретического 1.5)
+        const VISUAL_GAIN = 15.0; 
+
+        if (Math.abs(Ar) > 0.00001) {
+            // Ar > 0 (нагрев): сила Архимеда направлена вверх, против движения струи -> торможение
+            // Ar < 0 (охлаждение): сила Архимеда направлена вниз, по движению -> ускорение
+            k_archimedes = 1.0 - (VISUAL_GAIN * Ar); 
+            
+            // Ограничители реальности
+            k_archimedes = Math.max(0.1, Math.min(3.0, k_archimedes));
+        }
+
+        // 3. Применяем коэффициент ко всем параметрам
+        
+        // Дальнобойность меняется
+        const finalThrow = Math.max(0, throwDist * k_archimedes);
+
+        // Скорость в рабочей зоне меняется!
+        const Ak_mm2 = spec.f0 * 1000000; 
+        const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
+            v0, 
+            Ak_mm2, 
+            diffuserHeight, 
             workZoneHeight,
-            true, // Assuming ceiling mounted for simulator default
-            flowType,
-            dt,
-            roomWidth
+            2.0,          // m (форма струи)
+            k_archimedes  // <--- ВОТ ОНО: Передаем влияние температуры в расчет скорости
         );
 
-        // Adjust Throw Distance based on Buoyancy for UI display
-        // Cold jets drop (shorter effective throw before hitting zone), Hot jets float (longer)
-        let finalThrow = perf.throwDist || 0;
-        if (Ar < 0) finalThrow *= 0.8; 
-        else if (Ar > 0) finalThrow *= 1.2;
-
         return {
-            v0: perf.v0 || 0,
-            pressure: perf.pressure || 0,
-            noise: perf.noise || 0,
+            v0: Math.max(0, v0),
+            pressure: Math.max(0, pressure),
+            noise: Math.max(0, noise),
             throwDist: finalThrow,
-            workzoneVelocity,
-            coverageRadius,
-            spec: perf.spec,
-            Ar,
+            workzoneVelocity: Math.max(0, workzoneVelocity),
+            coverageRadius: Math.max(0, coverageRadius),
+            spec,
+            Ar, // Нужно для визуализации частиц в Canvas
             error: null
         };
-    }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight, roomWidth]);
+    }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
 };
 
-// --- FIELD CALCULATIONS ---
+// --- Вспомогательные функции (Top View logic preserved) ---
 
-/**
- * Calculates the 2D velocity field at Work Zone height using Superposition.
- * Uses Root Mean Square (RMS) summation for energy conservation: V_res = sqrt(sum(V_i^2)).
- * Applies Schlichting jet profile for radial decay.
- */
 export const calculateVelocityField = (
-    roomWidth: number, roomLength: number, placedDiffusers: PlacedDiffuser[], 
+    roomWidth: number, roomLength: number, placedDiffusers: any[], 
     diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5
 ): number[][] => {
+    // Рассчитываем сетку скоростей для Heatmap
     const cols = Math.ceil(roomWidth / gridStep);
     const rows = Math.ceil(roomLength / gridStep);
     const field: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
@@ -231,27 +214,23 @@ export const calculateVelocityField = (
             const x = c * gridStep + gridStep / 2;
             const y = r * gridStep + gridStep / 2;
             
-            let sumV2 = 0; // Sum of squares
+            let maxV = 0;
             
-            for (const d of placedDiffusers) {
-                const dx = x - d.x;
-                const dy = y - d.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                // Get core velocity and radius at the workplane intersection
-                const vCore = d.performance.workzoneVelocity;
+            // Находим максимальную скорость от всех диффузоров в этой точке (суперпозицию упрощаем до max)
+            placedDiffusers.forEach(d => {
+                const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
                 const radius = d.performance.coverageRadius;
                 
-                // Schlichting Velocity Profile: V(r) = Vc * (1 - (r/R)^1.5)^2
                 if (dist <= radius) {
-                    const profileFactor = Math.pow(1 - Math.pow(dist / radius, 1.5), 2);
-                    const vLocal = vCore * profileFactor;
-                    sumV2 += vLocal * vLocal;
+                    // Упрощенный профиль скорости: макс в центре, падает к краям
+                    const vCore = d.performance.workzoneVelocity;
+                    // Профиль Шлихтинга (упрощенно):
+                    const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
+                    if (vPoint > maxV) maxV = vPoint;
                 }
-            }
+            });
             
-            // RMS Superposition
-            field[r][c] = Math.sqrt(sumV2);
+            field[r][c] = maxV;
         }
     }
     return field; 
@@ -261,7 +240,7 @@ export const analyzeCoverage = (velocityField: number[][]) => {
     let totalPoints = 0;
     let coveredPoints = 0;
     let totalVelocity = 0;
-    let comfortZones = 0; // 0.1 - 0.25 m/s (ISO 7730 Category A/B)
+    let comfortZones = 0; // 0.1 - 0.25 m/s
     let warningZones = 0; // 0.25 - 0.5 m/s
     let draftZones = 0;   // > 0.5 m/s
     let deadZones = 0;    // < 0.1 m/s

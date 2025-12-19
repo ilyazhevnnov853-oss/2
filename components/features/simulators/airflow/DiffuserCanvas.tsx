@@ -21,7 +21,6 @@ interface DiffuserCanvasProps {
   roomWidth?: number;
   roomLength?: number;
   viewMode?: 'side' | 'top' | '3d';
-  viewAxis?: 'front' | 'side';
   placedDiffusers?: PlacedDiffuser[];
   onUpdateDiffuserPos?: (id: string, x: number, y: number) => void;
   onSelectDiffuser?: (id: string) => void;
@@ -36,7 +35,6 @@ interface DiffuserCanvasProps {
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
-  showRoom?: boolean;
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -84,9 +82,6 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 roomLength={props.roomLength || 6}
                 diffuserHeight={props.diffuserHeight}
                 workZoneHeight={props.workZoneHeight}
-                placedDiffusers={props.placedDiffusers}
-                selectedDiffuserId={props.selectedDiffuserId}
-                showRoom={props.showRoom}
             />
         );
     }
@@ -104,13 +99,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
             modelId={props.modelId}
             showGrid={props.showGrid}
             roomHeight={props.roomHeight}
-            roomWidth={props.roomWidth || 6}
-            roomLength={props.roomLength || 6}
             diffuserHeight={props.diffuserHeight}
             workZoneHeight={props.workZoneHeight}
-            placedDiffusers={props.placedDiffusers}
-            selectedDiffuserId={props.selectedDiffuserId}
-            viewAxis={props.viewAxis || 'front'}
         />
     );
 };

@@ -1,6 +1,5 @@
-
-import React, { useMemo, useCallback } from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
+import React from 'react';
+import { Fan, ScanLine, Wind, Thermometer, Home, ArrowUpToLine, ArrowUpFromLine, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft, Eye, Grid, Layers, Download, GripHorizontal } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
 import { GlassButton, GlassSlider } from '../../../ui/Shared';
@@ -14,57 +13,45 @@ export const SimulatorLeftPanel = ({
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
-    onAddDiffuser, isSingleMode
+    onAddDiffuser
 }: any) => {
 
-    // Memoize available diameters for the current model to avoid recalculating on every render
-    const availableDiameters = useMemo(() => {
-        return Object.keys(SPECS).filter(d => {
-            const val = !isNaN(Number(d)) ? Number(d) : d;
-            // Check if this diameter is valid for the current model & flow type
-            // using a dummy volume (100) just to check existence in ENGINEERING_DATA
-            return calculatePerformance(params.modelId, currentMode.flowType, val, 100) !== null;
-        });
-    }, [params.modelId, currentMode.flowType]);
-
-    const handleModelChange = useCallback((id: string) => {
-        const model = DIFFUSER_CATALOG.find(m => m.id === id);
-        if (!model) return;
-
-        // Find the first valid diameter for the new model
-        const firstValidMode = model.modes[0];
+    const handleModelChange = (id: string) => {
         const validDiameter = Object.keys(SPECS).find(d => {
             const val = !isNaN(Number(d)) ? Number(d) : d;
-            return calculatePerformance(id, firstValidMode.flowType, val, 100) !== null;
+            const model = DIFFUSER_CATALOG.find(m => m.id === id);
+            if (!model) return false;
+            return calculatePerformance(id, model.modes[0].flowType, val, 100) !== null;
         });
-
         const newDiameter = validDiameter ? (!isNaN(Number(validDiameter)) ? Number(validDiameter) : validDiameter) : '';
         
-        setParams((p: any) => {
-            let newVol = p.volume;
-            // Adjust volume to new spec limits if necessary
-            if (newDiameter && SPECS[newDiameter]) {
-                 const { min, max } = SPECS[newDiameter];
-                 if (newVol < min) newVol = min;
-                 if (newVol > max) newVol = max;
-            }
-            return { ...p, modelId: id, modeIdx: 0, diameter: newDiameter, volume: newVol };
-        });
+        let newVol = params.volume;
+        if (newDiameter && SPECS[newDiameter]) {
+             const { min, max } = SPECS[newDiameter];
+             if (newVol < min) newVol = min;
+             if (newVol > max) newVol = max;
+        }
+        setParams(p => ({ ...p, modelId: id, modeIdx: 0, diameter: newDiameter, volume: newVol }));
         setSizeSelected(!!newDiameter);
-    }, [setParams, setSizeSelected]);
+    };
 
-    const handleSizeSelect = useCallback((d: string | number) => {
-        setParams((p: any) => {
-            let newVol = p.volume;
-            if (d && SPECS[d]) {
-                 const { min, max } = SPECS[d];
-                 if (newVol < min) newVol = min;
-                 if (newVol > max) newVol = max;
-            }
-            return { ...p, diameter: d, volume: newVol };
-        });
+    const handleSizeSelect = (d: string | number) => {
+        let newVol = params.volume;
+        if (d && SPECS[d]) {
+             const { min, max } = SPECS[d];
+             if (newVol < min) newVol = min;
+             if (newVol > max) newVol = max;
+        }
+        setParams(p => ({ ...p, diameter: d, volume: newVol }));
         setSizeSelected(true);
-    }, [setParams, setSizeSelected]);
+    };
+
+    const toggleCeilingMount = () => {
+        setParams(p => ({
+            ...p, isCeilingMounted: !p.isCeilingMounted,
+            diffuserHeight: !p.isCeilingMounted ? p.roomHeight : p.diffuserHeight
+        }));
+    };
 
     return (
         <>
@@ -140,29 +127,21 @@ export const SimulatorLeftPanel = ({
                                     {!sizeSelected && <span className="text-[9px] text-amber-500 font-bold animate-pulse flex items-center gap-1"><AlertTriangle size={10}/> Выберите размер</span>}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    {availableDiameters.map(d => {
+                                    {Object.keys(SPECS).map(d => {
                                         const val = !isNaN(Number(d)) ? Number(d) : d;
-                                        return (
-                                            <button 
-                                                key={d} 
-                                                onClick={() => handleSizeSelect(val)} 
-                                                className={`px-4 py-2.5 rounded-xl text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-transparent shadow-[0_0_15px_rgba(0,0,0,0.2)] dark:shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105' : 'bg-white dark:bg-white/5 text-slate-500 border-black/5 dark:border-transparent hover:bg-black/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'}`}
-                                            >
-                                                {d}
-                                            </button>
-                                        );
+                                        if (calculatePerformance(params.modelId, currentMode.flowType, val, 100) === null) return null;
+                                        return <button key={d} onClick={() => handleSizeSelect(val)} className={`px-4 py-2.5 rounded-xl text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-transparent shadow-[0_0_15px_rgba(0,0,0,0.2)] dark:shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105' : 'bg-white dark:bg-white/5 text-slate-500 border-black/5 dark:border-transparent hover:bg-black/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'}`}>{d}</button>;
                                     })}
-                                    {availableDiameters.length === 0 && <span className="text-[10px] text-slate-500 italic">Нет доступных размеров</span>}
                                 </div>
                             </div>
                             <div className="space-y-6">
-                                <GlassSlider label="Расход воздуха" icon={<Wind size={14}/>} val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч" onChange={(v: number) => setParams((p: any) => ({...p, volume: v}))}/>
-                                <GlassSlider label="Т° Притока" icon={<Thermometer size={14}/>} val={params.temperature} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams((p: any) => ({...p, temperature: v}))} color="temp"/>
+                                <GlassSlider label="Расход воздуха" icon={<Wind size={14}/>} val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч" onChange={(v: number) => setParams(p => ({...p, volume: v}))}/>
+                                <GlassSlider label="Т° Притока" icon={<Thermometer size={14}/>} val={params.temperature} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, temperature: v}))} color="temp"/>
                             </div>
                         </AccordionItem>
 
                         <AccordionItem title="Помещение" icon={<ScanLine size={18}/>} isOpen={openSection === 'room'} onClick={() => toggleSection('room')}>
-                            <div className="grid grid-cols-2 gap-3 mb-4">
+                            <div className="grid grid-cols-2 gap-3 mb-6">
                                 {['roomWidth', 'roomLength', 'roomHeight'].map(key => (
                                     <div key={key} className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/20 transition-colors focus-within:border-blue-500/50 group">
                                         <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1.5 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
@@ -170,42 +149,47 @@ export const SimulatorLeftPanel = ({
                                             {key === 'roomLength' && 'Длина'}
                                             {key === 'roomHeight' && 'Высота'} (м)
                                         </label>
-                                        <input 
-                                            type="number" 
-                                            step="0.5" 
-                                            value={(params as any)[key]} 
-                                            onChange={(e) => {
-                                                const val = Number(e.target.value);
-                                                setParams((p: any) => {
-                                                    const updates: any = { [key]: val };
-                                                    // Sync diffuser height with room height automatically if it exceeds or was aligned
-                                                    if (key === 'roomHeight') updates.diffuserHeight = val;
-                                                    return { ...p, ...updates };
-                                                });
-                                            }} 
-                                            className="bg-transparent w-full text-sm font-bold font-mono text-slate-900 dark:text-white outline-none" 
-                                        />
+                                        <input type="number" step="0.5" value={(params as any)[key]} onChange={(e) => setParams(p => ({...p, [key]: Number(e.target.value)}))} className="bg-transparent w-full text-sm font-bold font-mono text-slate-900 dark:text-white outline-none" />
                                     </div>
                                 ))}
-                            </div>
-
-                            {/* WORK ZONE TOGGLE */}
-                            <div className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 mb-6">
-                                <label className="text-[9px] font-bold text-slate-500 uppercase block mb-2">Высота рабочей зоны</label>
-                                <div className="flex bg-white/5 p-1 rounded-xl">
-                                    {[1.5, 2.0].map(h => (
-                                        <button
-                                            key={h}
-                                            onClick={() => setParams((p:any) => ({...p, workZoneHeight: h}))}
-                                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all ${params.workZoneHeight === h ? 'bg-white dark:bg-slate-600 text-black dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                        >
-                                            {h.toFixed(1)} м
-                                        </button>
-                                    ))}
+                                
+                                <div className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 hover:border-black/10 dark:hover:border-white/20 transition-colors">
+                                    <label className="text-[9px] font-bold text-slate-500 uppercase block mb-1.5">Раб. Зона (м)</label>
+                                    <div className="flex bg-white/40 dark:bg-black/40 rounded-lg p-1 gap-1 h-[26px]">
+                                        {[1.5, 2.0].map(val => (
+                                            <button
+                                                key={val}
+                                                onClick={() => setParams((p: any) => ({ ...p, workZoneHeight: val }))}
+                                                className={`flex-1 rounded-md text-[10px] font-bold font-mono transition-all ${params.workZoneHeight === val ? 'bg-white dark:bg-slate-600 text-black dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                            >
+                                                {val.toFixed(1)}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
-
-                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams((p: any) => ({...p, roomTemp: v}))} color="temp"/>
+                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))} color="temp"/>
+                            <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/5">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"><ArrowUpFromLine size={16}/></div>
+                                        <div>
+                                            <div className="text-[10px] font-bold uppercase text-slate-500">Тип монтажа</div>
+                                            <div className="text-xs font-bold text-slate-900 dark:text-white tracking-wide">{params.isCeilingMounted ? 'Потолочный' : 'Свободный'}</div>
+                                        </div>
+                                    </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" className="sr-only peer" checked={params.isCeilingMounted} onChange={toggleCeilingMount} />
+                                        <div className="w-12 h-7 bg-black/10 dark:bg-black/40 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                                    </label>
+                                </div>
+                                <div className={`transition-all duration-300 overflow-hidden ${!params.isCeilingMounted ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="bg-black/5 dark:bg-black/20 p-3 rounded-2xl border border-black/5 dark:border-white/5 flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Высота установки</span>
+                                        <div className="flex items-center gap-2"><input type="number" step="0.1" value={params.diffuserHeight} onChange={(e) => setParams(p => ({...p, diffuserHeight: Number(e.target.value)}))} className="bg-transparent w-16 text-right text-sm font-bold font-mono text-slate-900 dark:text-white outline-none"/><span className="text-[10px] font-bold text-slate-600">м</span></div>
+                                    </div>
+                                </div>
+                            </div>
                         </AccordionItem>
                     </div>
 
@@ -213,7 +197,7 @@ export const SimulatorLeftPanel = ({
                     <div className="p-5 bg-white/60 dark:bg-[#050508]/60 border-t border-black/5 dark:border-white/5 backdrop-blur-xl absolute bottom-0 left-0 right-0 lg:relative">
                             <div className="grid grid-cols-2 gap-3">
                             <GlassButton onClick={togglePower} active={isPowerOn} icon={<Power size={18} />} label={isPowerOn ? "Стоп" : "Старт"} customClass={`${isPowerOn ? "bg-red-500 text-white shadow-lg shadow-red-500/30 border border-red-400/50" : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border border-emerald-400/50"}`}/>
-                            {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error || isSingleMode} />}
+                            {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} />}
                                 {viewMode === 'side' && <GlassButton onClick={() => setIsPlaying(!isPlaying)} icon={isPlaying ? <Pause size={18}/> : <Play size={18}/>} secondary={true} disabled={!isPowerOn} />}
                             </div>
                     </div>

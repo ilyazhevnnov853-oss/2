@@ -1,15 +1,15 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
-import { DIFFUSER_CATALOG } from '../../../../../constants';
+import { PerformanceResult } from '../../../../../types';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 3500,
-  GRID_CELL_SIZE: 30, // Resolution for fluid pressure grid
-  REPULSION_FORCE: 15.0, // Strength of stream-stream repulsion
+  MAX_PARTICLES: 2000, 
+  SPAWN_RATE_BASE: 5,
+  SPAWN_RATE_MULTIPLIER: 8
 };
 
+// --- TYPES ---
 interface Particle {
     active: boolean;
     x: number; 
@@ -41,32 +41,21 @@ interface SideViewCanvasProps {
   flowType: string; 
   modelId: string;
   showGrid: boolean;
-  roomHeight: number;
-  roomWidth: number;
-  roomLength: number;
+  roomHeight: number; 
   diffuserHeight: number; 
   workZoneHeight: number;
-  placedDiffusers?: PlacedDiffuser[];
-  selectedDiffuserId?: string | null;
-  viewAxis: 'front' | 'side';
 }
 
+// --- HELPERS ---
 const getGlowColor = (t: number) => {
-    if (t <= 18) return `64, 224, 255`; // Cold
-    if (t >= 28) return `255, 99, 132`; // Hot
-    if (t > 18 && t < 28) return `100, 255, 160`; // Comfort
+    if (t <= 18) return `64, 224, 255`; 
+    if (t >= 28) return `255, 99, 132`; 
+    if (t > 18 && t < 28) return `100, 255, 160`; 
     return `255, 255, 255`;
 };
 
-const getSideLayout = (w: number, h: number, rh: number, wallWidth: number) => {
-    const padding = 40;
-    const availW = w - padding * 2;
-    const availH = h - padding * 2;
-    const ppm = Math.min(availW / wallWidth, availH / rh);
-    const floorY = h - padding;
-    const ceilingY = floorY - rh * ppm;
-    const originX = (w - wallWidth * ppm) / 2;
-    return { ppm, originX, floorY, ceilingY };
+const getSideLayout = (w: number, h: number, rh: number) => {
+    return { ppm: h / rh };
 };
 
 const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
@@ -74,94 +63,193 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     const requestRef = useRef<number>(0);
     const simulationRef = useRef(props);
     const particlePool = useRef<Particle[]>([]);
-    
-    // Physics Grid for SPH-like pressure simulation
-    const densityGrid = useRef<Float32Array | null>(null);
-    const gridCols = useRef(0);
-    const gridRows = useRef(0);
-    
+
+    // Init Pool
     useEffect(() => {
         if (particlePool.current.length === 0) {
             for (let i = 0; i < CONSTANTS.MAX_PARTICLES; i++) {
                 particlePool.current.push({
-                    active: false, x: 0, y: 0, vx: 0, vy: 0, buoyancy: 0, drag: 0, age: 0, life: 0,
-                    lastHistoryTime: 0, history: [], color: '255,255,255',
-                    waveFreq: 0, wavePhase: 0, waveAmp: 0, isHorizontal: false, isSuction: false
+                    active: false,
+                    x: 0, y: 0, vx: 0, vy: 0,
+                    buoyancy: 0, drag: 0, age: 0, life: 0,
+                    lastHistoryTime: 0,
+                    history: [], 
+                    color: '255,255,255',
+                    waveFreq: 0, wavePhase: 0, waveAmp: 0,
+                    isHorizontal: false, isSuction: false
                 });
             }
         }
     }, []);
 
-    useEffect(() => { simulationRef.current = props; }, [props]);
+    // Sync Props
+    useEffect(() => {
+        simulationRef.current = props;
+    }, [props]);
 
-    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number, spawnX: number, spawnY: number, perf: PerformanceResult, sourceModelId: string) => {
-        const { temp, roomTemp, roomHeight } = state;
+    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number) => {
+        const { physics, temp, flowType, modelId, width, roomHeight, diffuserHeight } = state;
         
-        const model = DIFFUSER_CATALOG.find(m => m.id === sourceModelId);
-        const flowType = model ? model.modes[0].flowType : state.flowType;
+        if (physics.error) return;
+        const spec = physics.spec;
+        if (!spec || !spec.A) return;
 
-        if (perf.error || !perf.spec) return;
-
-        const nozzleW = (perf.spec.A / 1000) * ppm;
-        const pxSpeed = (perf.v0 || 0) * ppm * 0.8;
-        const dtTemp = temp - roomTemp;
+        const nozzleW = (spec.A / 1000) * ppm;
+        const scale = ppm / 1000;
         
-        const buoyancy = -(dtTemp / 293) * 9.81 * ppm * 4.0;
+        const diffuserYPos = (roomHeight - diffuserHeight) * ppm;
+        const hD = (spec.D || 0) * scale;
+        const startY = diffuserYPos + hD;
 
-        let vx = 0, vy = 0, drag = 0.96, waveAmp = 5, waveFreq = 4 + Math.random() * 4, isHorizontal = false, isSuction = false;
+        const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
+
+        let startX = width / 2;
+        let vx = 0, vy = 0;
+        let drag = 0.96;
+        let waveAmp = 5;
+        let waveFreq = 4 + Math.random() * 4;
+        let isHorizontal = false;
+        let isSuction = false;
+
+        const physicsAr = physics.Ar || 0; 
+        const visualGain = 50.0; 
+        const buoyancy = -physicsAr * (physics.v0 * physics.v0) * ppm * visualGain;
 
         if (flowType === 'suction') {
             isSuction = true;
-            const wallW = state.viewAxis === 'front' ? state.roomWidth : state.roomLength;
-            const { originX, ceilingY } = getSideLayout(state.width, state.height, state.roomHeight, wallW);
-            p.x = originX + Math.random() * (wallW * ppm);
-            p.y = ceilingY + Math.random() * (state.roomHeight * ppm);
-            const dx = spawnX - p.x; const dy = spawnY - p.y;
+            startX = Math.random() * width;
+            const spawnY = Math.random() * state.height;
+            const targetX = width / 2;
+            const targetY = diffuserYPos;
+            const dx = targetX - startX;
+            const dy = targetY - spawnY;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            const force = (perf.v0 * 500) / (dist + 10);
-            vx = (dx / dist) * force; vy = (dy / dist) * force;
-            drag = 1.0; waveAmp = 0; p.life = 3.0; p.color = '150, 150, 150';
-        } else if (flowType.includes('horizontal')) {
-            isHorizontal = true;
-            const side = Math.random() > 0.5 ? 1 : -1;
-            p.x = spawnX + side * (nozzleW * 0.55); p.y = spawnY;
-            const spread = (Math.random() - 0.5) * 0.1;
-            const angle = side === 1 ? spread : Math.PI + spread;
-            vx = Math.cos(angle) * pxSpeed * 1.2; vy = Math.sin(angle) * pxSpeed * 0.2;
-            if (flowType.includes('swirl')) { waveAmp = 15; waveFreq = 8; } else { waveAmp = 3; }
-        } else if (flowType === '4-way') {
-            isHorizontal = true;
-            const side = Math.random() > 0.5 ? 1 : -1;
-            p.x = spawnX + side * (nozzleW * 0.55); p.y = spawnY;
-            vx = side * pxSpeed * 1.0; vy = pxSpeed * 0.1;
-        } else if (sourceModelId === 'dpu-m' && flowType.includes('vertical')) {
-            const side = Math.random() > 0.5 ? 1 : -1;
-            p.x = spawnX + side * (nozzleW * 0.45); p.y = spawnY;
-            const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
-            vx = side * Math.sin(coneAngle) * pxSpeed; vy = Math.cos(coneAngle) * pxSpeed;
-            waveAmp = 5; drag = 0.95;
-        } else if (sourceModelId === 'dpu-k' && flowType.includes('vertical')) {
-            p.x = spawnX + (Math.random() - 0.5) * nozzleW * 0.95; p.y = spawnY;
-            const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
-            vx = Math.sin(spreadAngle) * pxSpeed * 0.8; vy = Math.cos(spreadAngle) * pxSpeed;
-            waveAmp = 8; drag = 0.96;
-        } else if (flowType === 'vertical-swirl') {
-            p.x = spawnX + (Math.random() - 0.5) * nozzleW * 0.9; p.y = spawnY;
-            const spread = (Math.random() - 0.5) * 1.5;
-            vx = Math.sin(spread) * pxSpeed * 0.5; vy = Math.cos(spread) * pxSpeed;
-            waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
+            const force = ((physics.v0 || 0) * 500) / (dist + 10);
+            vx = (dx / dist) * force;
+            vy = (dy / dist) * force;
+            drag = 1.0; waveAmp = 0;
+            p.life = 3.0; 
+            p.color = '150, 150, 150';
         } else {
-            p.x = spawnX + (Math.random() - 0.5) * nozzleW * 0.95; p.y = spawnY;
-            const spread = (Math.random() - 0.5) * 0.05;
-            vx = Math.sin(spread) * pxSpeed * 0.3; vy = Math.cos(spread) * pxSpeed * 1.3;
-            waveAmp = 1; drag = 0.985;
+            if (flowType.includes('horizontal')) {
+                isHorizontal = true;
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.55);
+                const spread = (Math.random() - 0.5) * 0.1; 
+                const angle = side === 1 ? spread : Math.PI + spread;
+                vx = Math.cos(angle) * pxSpeed * 1.2; 
+                vy = Math.sin(angle) * pxSpeed * 0.2; 
+                if (flowType.includes('swirl')) { waveAmp = 15; waveFreq = 8; } else { waveAmp = 3; }
+            } else if (flowType === '4-way') {
+                isHorizontal = true;
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.55);
+                vx = side * pxSpeed * 1.0;
+                vy = pxSpeed * 0.1;
+            } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
+                const side = Math.random() > 0.5 ? 1 : -1;
+                startX = width/2 + side * (nozzleW * 0.45);
+                const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
+                vx = side * Math.sin(coneAngle) * pxSpeed;
+                vy = Math.cos(coneAngle) * pxSpeed;
+                waveAmp = 5; drag = 0.95;
+            } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
+                vx = Math.sin(spreadAngle) * pxSpeed * 0.8;
+                vy = Math.cos(spreadAngle) * pxSpeed;
+                waveAmp = 8; drag = 0.96;
+            } else if (flowType === 'vertical-swirl') {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.9;
+                const spread = (Math.random() - 0.5) * 1.5; 
+                vx = Math.sin(spread) * pxSpeed * 0.5;
+                vy = Math.cos(spread) * pxSpeed;
+                waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
+            } else if (flowType === 'vertical-compact') {
+                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                const spread = (Math.random() - 0.5) * 0.05; 
+                vx = Math.sin(spread) * pxSpeed * 0.3;
+                vy = Math.cos(spread) * pxSpeed * 1.3; 
+                waveAmp = 1; drag = 0.985;
+            }
+
+            p.life = 2.0 + Math.random() * 1.5;
+            p.color = getGlowColor(temp);
         }
 
-        if (!isSuction) { p.life = 2.0 + Math.random() * 1.5; p.color = getGlowColor(temp); }
-        p.vx = vx; p.vy = vy; p.buoyancy = buoyancy; p.drag = drag; p.age = 0;
+        p.x = startX; p.y = startY; p.vx = vx; p.vy = vy; 
+        p.buoyancy = buoyancy; p.drag = drag; p.age = 0; 
         p.waveFreq = waveFreq; p.wavePhase = Math.random() * Math.PI * 2; p.waveAmp = waveAmp;
         p.isHorizontal = isHorizontal; p.isSuction = isSuction;
-        p.active = true; p.lastHistoryTime = 0; p.history.length = 0;
+        p.active = true;
+        p.lastHistoryTime = 0;
+        p.history.length = 0; 
+    };
+
+    const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number, state: SideViewCanvasProps) => {
+        const spec = state.physics.spec;
+        if (!spec || !spec.A) return;
+
+        const scale = ppm / 1000;
+        const wA = spec.A * scale;
+        const hD = (spec.D || 0) * scale;
+        const hC = (spec.C || 0) * scale; 
+        const hTotal = hD + hC;
+        const yPos = (state.roomHeight - state.diffuserHeight) * ppm;
+        
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(cx - (wA * 0.8)/2, 0, wA * 0.8, yPos);
+        
+        ctx.save();
+        ctx.translate(0, yPos);
+        ctx.fillStyle = '#475569';
+        ctx.beginPath();
+        ctx.rect(cx - wA/2, 0, wA, hD); ctx.fill();
+        
+        ctx.fillStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.moveTo(cx - wA/2, hD);
+        
+        if (state.modelId === 'dpu-s') {
+             ctx.lineTo(cx - wA/2 + 10, hTotal + 20);
+             ctx.lineTo(cx + wA/2 - 10, hTotal + 20); ctx.lineTo(cx + wA/2, hD);
+        } else if (state.modelId === 'amn-adn') {
+             ctx.rect(cx - wA/2, hD, wA, 5*scale);
+        } else {
+             ctx.quadraticCurveTo(cx - wA/2, hTotal, cx, hTotal + 5);
+             ctx.quadraticCurveTo(cx + wA/2, hTotal, cx + wA/2, hD);
+        }
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+    };
+
+    const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: SideViewCanvasProps) => {
+        if (!state.showGrid) return;
+        
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        const step = 0.5 * ppm;
+        
+        ctx.beginPath();
+        for (let x = w/2; x < w; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let x = w/2; x > 0; x -= step) { ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+        for (let y = 0; y < h; y += step) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        ctx.stroke();
+        
+        if (state.workZoneHeight > 0) {
+            const wzY = (state.roomHeight - state.workZoneHeight) * ppm;
+            ctx.beginPath();
+            ctx.setLineDash([10, 5]);
+            ctx.strokeStyle = 'rgba(255, 200, 0, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.moveTo(0, wzY);
+            ctx.lineTo(w, wzY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.6)';
+            ctx.font = 'bold 10px Inter';
+            ctx.fillText(`РАБОЧАЯ ЗОНА (${state.workZoneHeight}м)`, 10, wzY - 5);
+        }
     };
 
     const animate = useCallback(() => {
@@ -171,192 +259,169 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         if (!ctx) return;
 
         const state = simulationRef.current;
-        const { width, height, isPowerOn, isPlaying, viewAxis, roomHeight, roomWidth, roomLength, diffuserHeight } = state;
+        const { width, height, isPowerOn, isPlaying, roomHeight } = state;
+        
         const dt = CONSTANTS.BASE_TIME_STEP;
+        const { ppm } = getSideLayout(width, height, roomHeight);
 
-        const wallW = viewAxis === 'front' ? roomWidth : roomLength;
-        const { ppm, originX, floorY, ceilingY } = getSideLayout(width, height, roomHeight, wallW);
-        const rightWall = originX + wallW * ppm;
-
-        // --- GRID INIT ---
-        const cols = Math.ceil(width / CONSTANTS.GRID_CELL_SIZE);
-        const rows = Math.ceil(height / CONSTANTS.GRID_CELL_SIZE);
-        if (!densityGrid.current || gridCols.current !== cols || gridRows.current !== rows) {
-            densityGrid.current = new Float32Array(cols * rows);
-            gridCols.current = cols;
-            gridRows.current = rows;
+        // If simulation is OFF, simply clear the canvas
+        if (!isPowerOn) {
+                ctx.clearRect(0, 0, width, height);
+                // Fill bg for better clear
+                ctx.fillStyle = '#030304';
+                ctx.fillRect(0, 0, width, height);
+                drawSideViewGrid(ctx, width, height, ppm, state);
+                drawDiffuserSideProfile(ctx, width/2, ppm, state);
+                requestRef.current = requestAnimationFrame(animate);
+                return;
         }
-        const grid = densityGrid.current;
-        grid.fill(0); // Clear grid every frame
 
-        // Background
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)';
+        // Trail effect
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
         ctx.fillRect(0, 0, width, height);
-
-        // Grid & Room
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(originX, ceilingY, wallW * ppm, roomHeight * ppm);
-        if (state.showGrid) {
-            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            ctx.beginPath();
-            const step = 0.5 * ppm;
-            for (let x = originX; x <= originX + wallW * ppm; x += step) { ctx.moveTo(x, ceilingY); ctx.lineTo(x, floorY); }
-            for (let y = ceilingY; y <= floorY; y += step) { ctx.moveTo(originX, y); ctx.lineTo(originX + wallW * ppm, y); }
-            ctx.stroke();
-        }
+        
+        drawSideViewGrid(ctx, width, height, ppm, state);
 
         const pool = particlePool.current;
-        const activeDiffusers: {x: number, y: number, perf: PerformanceResult, modelId: string}[] = [];
         
-        if (state.placedDiffusers && state.placedDiffusers.length > 0) {
-            state.placedDiffusers.forEach(d => {
-                const posInWall = viewAxis === 'front' ? d.x : d.y;
-                const cx = originX + posInWall * ppm;
-                const cy = ceilingY + (roomHeight - diffuserHeight) * ppm;
-                activeDiffusers.push({ 
-                    x: cx, 
-                    y: cy + (d.performance.spec.D/1000 * ppm), 
-                    perf: d.performance,
-                    modelId: d.modelId
-                });
-            });
-        } else {
-            activeDiffusers.push({ 
-                x: originX + (wallW/2) * ppm, 
-                y: ceilingY + (roomHeight - diffuserHeight) * ppm + (state.physics.spec?.D/1000 * ppm || 10), 
-                perf: state.physics,
-                modelId: state.modelId
-            });
-        }
-
-        // --- FLUID SIMULATION: PASS 1 ---
-        if (isPlaying) {
+        // 1. UPDATE AND SPAWN
+        if (isPowerOn && isPlaying && !state.physics.error) {
+            const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+            let spawnedCount = 0;
             for (let i = 0; i < pool.length; i++) {
-                if (!pool[i].active) continue;
-                const p = pool[i];
-                const gx = Math.floor(p.x / CONSTANTS.GRID_CELL_SIZE);
-                const gy = Math.floor(p.y / CONSTANTS.GRID_CELL_SIZE);
-                if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
-                    grid[gy * cols + gx] += 1;
+                if (!pool[i].active) {
+                    spawnParticle(pool[i], state, ppm);
+                    spawnedCount++;
+                    if (spawnedCount >= spawnRate) break;
                 }
             }
         }
 
-        // --- SPAWN PARTICLES ---
-        if (isPowerOn && isPlaying && activeDiffusers.length > 0) {
-            const maxV0 = Math.max(...activeDiffusers.map(d => d.perf.v0 || 0));
-            const spawnRate = Math.ceil(5 + (maxV0 / 2) * 8);
-            let spawned = 0;
-            
-            for (let i = 0; i < pool.length; i++) {
-                if (!pool[i].active) { 
-                    const source = activeDiffusers[Math.floor(Math.random() * activeDiffusers.length)];
-                    if (source.perf && !source.perf.error) {
-                        spawnParticle(pool[i], state, ppm, source.x, source.y, source.perf, source.modelId); 
-                        spawned++; 
-                    }
-                    if (spawned >= spawnRate) break; 
-                }
-            }
-        }
+        // 2. UPDATE PHYSICS & BATCHING
+        const maxH = height;
+        const batches: Record<string, Particle[]> = {};
+        const QUANTIZE = 10;
 
-        ctx.globalCompositeOperation = 'screen';
-        ctx.lineWidth = 1; ctx.lineCap = 'round';
-
-        // --- FLUID SIMULATION: PASS 2 ---
         for (let i = 0; i < pool.length; i++) {
             const p = pool[i];
             if (!p.active) continue;
 
-            if (isPlaying) {
+            if (isPowerOn && isPlaying) {
                 p.age += dt;
+                if (p.age > p.life || p.y > maxH || p.x < 0 || p.x > width || p.y < -100) {
+                    p.active = false;
+                    continue;
+                }
+
                 if (p.isSuction) {
-                    p.x += p.vx * dt; p.y += p.vy * dt;
+                    const targetX = width / 2;
+                    const targetY = (state.roomHeight - state.diffuserHeight) * ppm;
+                    const dx = targetX - p.x;
+                    const dy = targetY - p.y;
+                    const distSq = dx*dx + dy*dy;
+                    const dist = Math.sqrt(distSq);
+                    if (dist < 20) { 
+                        p.active = false;
+                        continue;
+                    }
+                    const force = ((state.physics.v0 || 0) * 2000) / (distSq + 100);
+                    p.vx += (dx / dist) * force * dt;
+                    p.vy += (dy / dist) * force * dt;
+                    p.x += p.vx; 
+                    p.y += p.vy;
                 } else {
-                    if (p.age > 0.2) {
-                        const gx = Math.floor(p.x / CONSTANTS.GRID_CELL_SIZE);
-                        const gy = Math.floor(p.y / CONSTANTS.GRID_CELL_SIZE);
-                        if (gx > 0 && gx < cols - 1 && gy > 0 && gy < rows - 1) {
-                            const idx = gy * cols + gx;
-                            if (grid[idx] > 3) {
-                                const densityLeft = grid[idx - 1];
-                                const densityRight = grid[idx + 1];
-                                const densityTop = grid[idx - cols];
-                                const densityBottom = grid[idx + cols];
-                                const forceX = (densityLeft - densityRight) * CONSTANTS.REPULSION_FORCE;
-                                const forceY = (densityTop - densityBottom) * CONSTANTS.REPULSION_FORCE;
-                                p.vx += forceX * dt; p.vy += forceY * dt;
-                            }
-                        }
-                    }
-
                     if (p.isHorizontal) {
-                        if (Math.abs(p.y - ceilingY) < (roomHeight * ppm * 0.15) && Math.abs(p.vx) > 0.3) { 
-                            p.vy += (ceilingY - p.y) * 5.0 * dt; 
-                        } else { 
-                            p.vy += p.buoyancy * dt * 0.5; 
-                        }
-                    } else { 
-                        p.vy += p.buoyancy * dt; 
+                        if (p.y < (height * 0.15) && Math.abs(p.vx) > 0.3) { p.vy += (0 - p.y) * 5.0 * dt; } 
+                        else { p.vy += p.buoyancy * dt * 0.5; }
+                    } else {
+                        p.vy += p.buoyancy * dt;
                     }
-                    
-                    p.vx *= p.drag; p.vy *= p.drag;
+                    p.vx *= p.drag;
+                    p.vy *= p.drag;
                     p.x += p.vx * dt; p.y += p.vy * dt;
-
-                    if (p.x < originX) { p.x = originX; p.vx *= -0.7; }
-                    else if (p.x > rightWall) { p.x = rightWall; p.vx *= -0.7; }
-                    if (p.y > floorY) { p.y = floorY; p.vy *= -0.2; p.vx *= 0.9; }
                 }
 
                 if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
+                    if (p.history.length > 20) p.history.shift();
                     p.history.push({ x: p.x, y: p.y, age: p.age });
                     p.lastHistoryTime = p.age;
-                    if (p.history.length > 20) p.history.shift();
                 }
             }
 
-            if (p.age > p.life || p.y < ceilingY - 100) {
-                p.active = false; continue;
-            }
+            // Add to Batch
+            if (p.history.length > 1) {
+                const rawAlpha = (1 - p.age/p.life) * 0.5;
+                const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
+                if (alpha <= 0) continue;
 
-            if (p.history.length > 2) {
-                ctx.strokeStyle = `rgba(${p.color}, ${(1 - p.age/p.life) * 0.5})`;
-                ctx.beginPath();
-                const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
-                const wx = (p.isHorizontal && !p.isSuction) ? 0 : waveVal;
-                const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
-                ctx.moveTo(p.x + wx, p.y + wy);
-                for (let j = p.history.length - 1; j >= 0; j--) {
-                    const h = p.history[j];
-                    const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
-                    ctx.lineTo(h.x + ((p.isHorizontal && !p.isSuction) ? 0 : hWave), h.y + ((p.isHorizontal && !p.isSuction) ? hWave : 0));
-                }
-                ctx.stroke();
+                const key = `${p.color}|${alpha}`;
+                if (!batches[key]) batches[key] = [];
+                batches[key].push(p);
             }
         }
 
+        // 3. DRAW BATCHES
+        ctx.globalCompositeOperation = 'screen';
+        ctx.lineWidth = 1; 
+        ctx.lineCap = 'round';
+
+        for (const key in batches) {
+            const [color, alphaStr] = key.split('|');
+            ctx.strokeStyle = `rgba(${color}, ${alphaStr})`;
+            ctx.beginPath();
+            
+            const particles = batches[key];
+            for (let k = 0; k < particles.length; k++) {
+                const p = particles[k];
+                const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
+                const wx = (p.isHorizontal && !p.isSuction) ? 0 : waveVal;
+                const wy = (p.isHorizontal && !p.isSuction) ? waveVal : 0;
+                
+                ctx.moveTo(p.x + wx, p.y + wy);
+                
+                for (let j = p.history.length - 1; j >= 0; j--) {
+                    const h = p.history[j];
+                    const hWave = Math.sin(h.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(h.age, 1.0);
+                    const hwx = (p.isHorizontal && !p.isSuction) ? 0 : hWave;
+                    const hwy = (p.isHorizontal && !p.isSuction) ? hWave : 0;
+                    ctx.lineTo(h.x + hwx, h.y + hwy);
+                }
+            }
+            ctx.stroke();
+        }
+
         ctx.globalCompositeOperation = 'source-over';
-        activeDiffusers.forEach(ad => {
-             const w = (ad.perf.spec?.A / 1000 * ppm) || 20;
-             ctx.fillStyle = '#475569';
-             ctx.fillRect(ad.x - w/2, ceilingY + (roomHeight - diffuserHeight) * ppm, w, (ad.perf.spec?.D/1000 * ppm) || 10);
-        });
+        drawDiffuserSideProfile(ctx, width/2, ppm, state);
 
         requestRef.current = requestAnimationFrame(animate);
     }, []);
 
     useEffect(() => {
         requestRef.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(requestRef.current);
+        return () => {
+            if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        };
     }, [animate]);
 
     return (
         <div className="relative w-full h-full">
-            <canvas ref={canvasRef} width={props.width} height={props.height} className="block w-full h-full" />
+            <canvas 
+                ref={canvasRef} 
+                width={props.width} 
+                height={props.height} 
+                className="block w-full h-full touch-none"
+                style={{ touchAction: 'none' }}
+            />
+            {props.physics.error && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
+                    <div className="flex flex-col items-center gap-4 p-8 border border-red-500/30 bg-red-500/5 rounded-3xl text-red-200">
+                        <span className="font-bold text-xl tracking-tight">ТИПОРАЗМЕР НЕДОСТУПЕН</span>
+                        <span className="text-sm opacity-70">Для выбранной модели нет данных для этого размера</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
-const MemoizedSideViewCanvas = React.memo(SideViewCanvas);
-export default MemoizedSideViewCanvas;
+export default React.memo(SideViewCanvas);
