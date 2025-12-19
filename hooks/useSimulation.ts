@@ -1,3 +1,4 @@
+
 import { useMemo } from 'react';
 import { SPECS, ENGINEERING_DATA } from '../constants';
 import { PerformanceResult, Spec } from '../types';
@@ -198,13 +199,13 @@ export const useScientificSimulation = (
     }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
 };
 
-// --- Вспомогательные функции (Top View logic preserved) ---
+// --- Вспомогательные функции ---
 
 export const calculateVelocityField = (
     roomWidth: number, roomLength: number, placedDiffusers: any[], 
     diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5
 ): number[][] => {
-    // Рассчитываем сетку скоростей для Heatmap
+    // Calculate Velocity Field for Heatmap using Vector Superposition
     const cols = Math.ceil(roomWidth / gridStep);
     const rows = Math.ceil(roomLength / gridStep);
     const field: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
@@ -214,23 +215,33 @@ export const calculateVelocityField = (
             const x = c * gridStep + gridStep / 2;
             const y = r * gridStep + gridStep / 2;
             
-            let maxV = 0;
+            let vecSumX = 0;
+            let vecSumY = 0;
             
-            // Находим максимальную скорость от всех диффузоров в этой точке (суперпозицию упрощаем до max)
+            // Calculate velocity vector from each diffuser
             placedDiffusers.forEach(d => {
-                const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
+                const dx = x - d.x;
+                const dy = y - d.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
                 const radius = d.performance.coverageRadius;
                 
                 if (dist <= radius) {
-                    // Упрощенный профиль скорости: макс в центре, падает к краям
                     const vCore = d.performance.workzoneVelocity;
-                    // Профиль Шлихтинга (упрощенно):
-                    const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
-                    if (vPoint > maxV) maxV = vPoint;
+                    // Simplified Schlichting profile
+                    const vMag = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
+                    
+                    // Normalize direction and scale by magnitude
+                    // If dist is very small, assume zero directional velocity (stagnation/source)
+                    if (dist > 0.01) {
+                        vecSumX += (dx / dist) * vMag;
+                        vecSumY += (dy / dist) * vMag;
+                    }
                 }
             });
             
-            field[r][c] = maxV;
+            // Resultant velocity is the magnitude of the summed vectors
+            // This simulates collision (opposing vectors cancel out) and merging (parallel vectors add up)
+            field[r][c] = Math.sqrt(vecSumX * vecSumX + vecSumY * vecSumY);
         }
     }
     return field; 

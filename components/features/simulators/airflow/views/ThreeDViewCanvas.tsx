@@ -232,48 +232,81 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
             if (isPlaying) {
                 p.age += dt;
                 if (p.isSuction) {
-                    // Find closest diffuser for suction target? Or just kill it?
-                    // For simplicity in multi-diffuser suction, allow particles to just float or target center if generic.
-                    // Improving: target closest source
-                    let minDist = Infinity;
-                    let target = {x:0, z:0};
-                    
-                    // Simple logic: suction usually doesn't work with multiple targets easily in this particle system 
-                    // without tracking which particle belongs to which source.
-                    // For now, let's keep suction simple or assume single source logic for suction path.
-                    // Or iterate activeDiffusers to find nearest.
-                    
-                    // Simplified: particles are just moved by velocity.
-                    // But suction logic in spawnParticle set initial velocity towards a target.
-                    // Here we apply force. 
-                    
-                    // Let's skip complex suction force for multiple diffusers for now to avoid lag, 
-                    // or just use the first one if suction mode.
-                    
-                    // Fallback to simple physics update if suction (velocity was set at spawn)
+                    // Simple suction logic: particles move towards source center
+                    // For better multi-diffuser suction, we'd need nearest neighbor search
+                    // Keeping simple drift for now
                     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-                    
                 } else {
-                    // Wall Collisions (Reflections)
-                    if (p.x < -rw/2) { p.x = -rw/2; p.vx *= -0.7; }
-                    else if (p.x > rw/2) { p.x = rw/2; p.vx *= -0.7; }
-                    
-                    if (p.z < -rl/2) { p.z = -rl/2; p.vz *= -0.7; }
-                    else if (p.z > rl/2) { p.z = rl/2; p.vz *= -0.7; }
-
-                    // Floor Collision
-                    if (p.y > rh) {
-                        p.y = rh;
-                        p.vy *= -0.2; // Damped bounce on floor
-                        p.vx *= 0.9;  // Friction
-                        p.vz *= 0.9;
+                    // --- COANDA EFFECT (Ceiling) ---
+                    // If near ceiling (y approx 0) and moving horizontally, sticking force
+                    if (p.isHorizontal && p.y < rh * 0.15 && Math.abs(p.y) < 60) {
+                        const horizSpeed = Math.sqrt(p.vx*p.vx + p.vz*p.vz);
+                        if (horizSpeed > 0.5) {
+                            // Apply lift force towards ceiling (y=0)
+                            p.vy -= 10.0 * dt; 
+                            // Dampen vertical velocity slightly to "stick"
+                            p.vy *= 0.9;
+                        }
                     }
 
-                    if (p.isHorizontal) {
-                        // Coanda: stick to ceiling (y=0)
-                        if (p.y < 50 && Math.abs(p.vx) > 0.3) p.vy += (0 - p.y) * 5.0 * dt;
-                        else p.vy += p.buoyancy * dt * 0.5;
-                    } else { p.vy += p.buoyancy * dt; }
+                    // --- WALL JET EFFECT (Walls) ---
+                    // Inelastic collision: cancel normal velocity, keep tangential, add turbulence
+                    
+                    // X-Walls
+                    if (p.x < -rw/2) { 
+                        p.x = -rw/2 + 1; 
+                        p.vx = 0; // Kill normal velocity
+                        // Add turbulence simulating boundary layer separation/vortices
+                        p.vx += Math.random() * 2; 
+                        p.vy += (Math.random() - 0.5) * 2; 
+                        p.vz += (Math.random() - 0.5) * 2;
+                        // Friction
+                        p.vy *= 0.95; p.vz *= 0.95;
+                    }
+                    else if (p.x > rw/2) { 
+                        p.x = rw/2 - 1; 
+                        p.vx = 0;
+                        p.vx -= Math.random() * 2;
+                        p.vy += (Math.random() - 0.5) * 2; 
+                        p.vz += (Math.random() - 0.5) * 2;
+                        p.vy *= 0.95; p.vz *= 0.95;
+                    }
+                    
+                    // Z-Walls
+                    if (p.z < -rl/2) { 
+                        p.z = -rl/2 + 1; 
+                        p.vz = 0;
+                        p.vz += Math.random() * 2;
+                        p.vx += (Math.random() - 0.5) * 2;
+                        p.vy += (Math.random() - 0.5) * 2;
+                        p.vx *= 0.95; p.vy *= 0.95;
+                    }
+                    else if (p.z > rl/2) { 
+                        p.z = rl/2 - 1; 
+                        p.vz = 0;
+                        p.vz -= Math.random() * 2;
+                        p.vx += (Math.random() - 0.5) * 2;
+                        p.vy += (Math.random() - 0.5) * 2;
+                        p.vx *= 0.95; p.vy *= 0.95;
+                    }
+
+                    // --- FLOOR SPREADING (Floor) ---
+                    if (p.y > rh) {
+                        p.y = rh - 1;
+                        // Kill vertical momentum (no bounce)
+                        p.vy = 0; 
+                        // High friction on floor, but allow spreading
+                        p.vx *= 0.85;  
+                        p.vz *= 0.85;
+                        // Spread turbulence
+                        p.vx += (Math.random() - 0.5) * 3;
+                        p.vz += (Math.random() - 0.5) * 3;
+                    }
+
+                    // Buoyancy / General movement
+                    if (!p.isHorizontal || p.y > 60) {
+                         p.vy += p.buoyancy * dt; 
+                    }
                     
                     p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
                     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
