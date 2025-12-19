@@ -1,11 +1,10 @@
-
-import { PerformanceResult } from '@/types';
-import { DIFFUSER_CATALOG } from '@/constants';
+import { PerformanceResult } from '../../../../../types';
+import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 export const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 3500, // Matching 2D density
+  MAX_PARTICLES: 3500,
   SPAWN_RATE_BASE: 5,
   SPAWN_RATE_MULTIPLIER: 8
 };
@@ -24,7 +23,7 @@ export interface Particle3D {
     waveFreq: number; 
     wavePhase: number; 
     waveAmp: number;
-    waveAngle: number; // For volumetric wave oscillation
+    waveAngle: number;
     isHorizontal: boolean;
     isSuction: boolean;
 }
@@ -54,13 +53,11 @@ export const project = (
     scale: number,
     panX: number, panY: number
 ) => {
-    // Rotation around Y axis
     const cx = Math.cos(rotY); 
     const sx = Math.sin(rotY);
     const x1 = x * cx - z * sx; 
     const z1 = z * cx + x * sx;
 
-    // Rotation around X axis
     const cy = Math.cos(rotX); 
     const sy = Math.sin(rotX);
     const y2 = y * cy - z1 * sy; 
@@ -75,7 +72,7 @@ export const project = (
     const factor = (fov / depth) * scale;
     return { 
         x: w / 2 + panX + x1 * factor, 
-        y: h / 2 + panY - y2 * factor, // Inverted Y for correct screen projection (Up is Up)
+        y: h / 2 + panY - y2 * factor,
         s: factor, 
         z: z2 
     };
@@ -88,6 +85,9 @@ export const getGlowColor = (t: number) => {
     return `255, 255, 255`;
 };
 
+/**
+ * Spawns a particle with physically derived initial velocity and buoyancy.
+ */
 export const spawnParticle = (
     p: Particle3D, 
     state: ThreeDViewCanvasProps, 
@@ -97,121 +97,87 @@ export const spawnParticle = (
     perf: PerformanceResult,
     sourceModelId: string
 ) => {
-    const { temp, roomTemp, diffuserHeight, roomHeight, roomWidth, roomLength } = state;
+    const { temp, roomTemp, diffuserHeight, roomHeight } = state;
     
-    // Determine flow type for this specific diffuser model
     const model = DIFFUSER_CATALOG.find(m => m.id === sourceModelId);
     const flowType = model ? model.modes[0].flowType : state.flowType;
 
     if (perf.error || !perf.spec) return;
     
     const nozzleW = (perf.spec.A / 1000) * PPM;
-    
-    // COORDINATE SYSTEM: Y=0 is CEILING. Y increases DOWNWARDS to Floor.
-    // diffuserHeight is height from floor. 
-    // So spawn position Y is (RoomHeight - DiffuserHeight).
+    // Y=0 is Ceiling. Spawn at diffuser face.
     const startY = (roomHeight - diffuserHeight) * PPM; 
     
     const pxSpeed = (perf.v0 || 0) * PPM * 0.8;
     const dtTemp = temp - roomTemp;
     
-    // Buoyancy: Hot air (-dtTemp negative) moves UP (-Y direction in our coordinate system).
-    // Cold air moves DOWN (+Y).
+    // Buoyancy Force: F ~ g * (dRho/Rho)
+    // Cold (dt < 0) -> Higher density -> Downward force (+Y).
+    // Hot (dt > 0) -> Lower density -> Upward force (-Y).
+    // Scaling factor 4.0 for visual effect
     const buoyancy = -(dtTemp / 293) * 9.81 * PPM * 4.0;
 
     let vx = 0, vy = 0, vz = 0, drag = 0.96, waveAmp = 5, waveFreq = 4 + Math.random() * 4, isHorizontal = false, isSuction = false;
 
     if (flowType === 'suction') {
         isSuction = true;
-        // Spawn randomly in room volume
-        p.x = (Math.random() - 0.5) * roomWidth * PPM;
-        p.z = (Math.random() - 0.5) * roomLength * PPM;
-        p.y = Math.random() * (roomHeight * PPM);
+        // Random spawn in volume
+        p.x = (Math.random() - 0.5) * state.roomWidth * PPM;
+        p.z = (Math.random() - 0.5) * state.roomLength * PPM;
+        p.y = Math.random() * (state.roomHeight * PPM);
         
-        // Target is the diffuser
+        // Attraction to source
         const dx = offsetX - p.x; 
         const dy = startY - p.y; 
         const dz = offsetZ - p.z;
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         const force = (perf.v0 * 500) / (dist + 10);
         
-        vx = (dx/dist)*force; 
-        vy = (dy/dist)*force; 
-        vz = (dz/dist)*force;
-        
+        vx = (dx/dist)*force; vy = (dy/dist)*force; vz = (dz/dist)*force;
         drag = 1.0; waveAmp = 0; p.life = 3.0; p.color = '150, 150, 150';
     } else {
-        const angle = Math.random() * Math.PI * 2; // Radial angle in XZ plane
+        const angle = Math.random() * Math.PI * 2; 
         
-        if (flowType.includes('horizontal')) {
+        if (flowType.includes('horizontal') || flowType.includes('4-way')) {
             isHorizontal = true;
-            // Radial spread
             p.x = offsetX + Math.cos(angle) * (nozzleW * 0.55);
             p.z = offsetZ + Math.sin(angle) * (nozzleW * 0.55);
             
             const spread = (Math.random() - 0.5) * 0.1;
-            // Velocity mainly horizontal
             vx = Math.cos(angle + spread) * pxSpeed * 1.2;
             vz = Math.sin(angle + spread) * pxSpeed * 1.2;
-            vy = pxSpeed * 0.2; // Slight downward push
+            vy = pxSpeed * 0.15; // Initial downward momentum from nozzle geometry
             
             if (flowType.includes('swirl')) { waveAmp = 15; waveFreq = 8; } else { waveAmp = 3; }
-
-        } else if (flowType === '4-way') {
-            isHorizontal = true;
-            const quad = Math.floor(Math.random() * 4) * (Math.PI / 2);
-            p.x = offsetX + Math.cos(quad) * (nozzleW * 0.55);
-            p.z = offsetZ + Math.sin(quad) * (nozzleW * 0.55);
-            vx = Math.cos(quad) * pxSpeed;
-            vz = Math.sin(quad) * pxSpeed;
-            vy = pxSpeed * 0.1;
 
         } else if (sourceModelId === 'dpu-m' && flowType.includes('vertical')) {
             // Conical
             const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
             p.x = offsetX + Math.cos(angle) * (nozzleW * 0.45);
             p.z = offsetZ + Math.sin(angle) * (nozzleW * 0.45);
-            
-            // vRad = sin(cone), vDown = cos(cone)
             const vRad = Math.sin(coneAngle) * pxSpeed;
             vx = Math.cos(angle) * vRad;
             vz = Math.sin(angle) * vRad;
-            vy = Math.cos(coneAngle) * pxSpeed; // Positive Y is down
+            vy = Math.cos(coneAngle) * pxSpeed; 
             waveAmp = 5; drag = 0.95;
-
-        } else if (sourceModelId === 'dpu-k' && flowType.includes('vertical')) {
-            p.x = offsetX + (Math.random() - 0.5) * nozzleW * 0.95;
-            p.z = offsetZ + (Math.random() - 0.5) * nozzleW * 0.95;
-            const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180);
-            
-            const tilt = Math.sin(spreadAngle);
-            vx = Math.cos(angle) * tilt * pxSpeed * 0.8;
-            vz = Math.sin(angle) * tilt * pxSpeed * 0.8;
-            vy = Math.cos(spreadAngle) * pxSpeed; 
-            waveAmp = 8; drag = 0.96;
 
         } else if (flowType === 'vertical-swirl') {
             p.x = offsetX + Math.cos(angle) * (nozzleW * 0.5);
             p.z = offsetZ + Math.sin(angle) * (nozzleW * 0.5);
-            
             const spread = (Math.random() - 0.5) * 1.5;
-            // Add tangential component for 3D swirl
             const vRad = Math.sin(spread) * pxSpeed;
             const vTan = pxSpeed * 0.5;
-            
             vx = Math.cos(angle) * vRad + Math.sin(angle) * vTan;
             vz = Math.sin(angle) * vRad - Math.cos(angle) * vTan;
             vy = Math.cos(spread) * pxSpeed;
-            
-            waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
+            waveAmp = 30; waveFreq = 6; drag = 0.94;
 
         } else {
-            // Compact
+            // Standard Vertical
             p.x = offsetX + (Math.random() - 0.5) * nozzleW * 0.95;
             p.z = offsetZ + (Math.random() - 0.5) * nozzleW * 0.95;
             const spread = (Math.random() - 0.5) * 0.05;
             const vRad = Math.sin(spread) * pxSpeed * 0.3;
-            
             vx = Math.cos(angle) * vRad;
             vz = Math.sin(angle) * vRad;
             vy = Math.cos(spread) * pxSpeed * 1.3;
@@ -228,4 +194,74 @@ export const spawnParticle = (
     p.waveAngle = Math.random() * Math.PI * 2; 
     p.isHorizontal = isHorizontal; p.isSuction = isSuction;
     p.active = true; p.lastHistoryTime = 0; p.history.length = 0; 
+};
+
+/**
+ * Updates particle position and velocity based on physical forces:
+ * - Drag
+ * - Buoyancy (Archimedes)
+ * - Coanda Effect (Ceiling attachment)
+ * - Wall/Floor Collisions
+ */
+export const updateParticlePhysics = (
+    p: Particle3D, 
+    dt: number, 
+    ceilingY: number, // Y coord of ceiling (usually 0)
+    floorY: number,   // Y coord of floor
+    rw: number,       // Room Width (px)
+    rl: number        // Room Length (px)
+) => {
+    p.age += dt;
+    
+    if (p.isSuction) {
+        // Simple linear drift for suction
+        p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+    } else {
+        // --- COANDA EFFECT ---
+        // If horizontal jet is near ceiling, it sticks.
+        // We simulate this by suppressing downward buoyancy or applying slight upward force.
+        // Y grows downwards. Ceiling is Y=0.
+        let effectiveBuoyancy = p.buoyancy;
+        
+        if (p.isHorizontal && Math.abs(p.y - ceilingY) < 60) {
+            // Check if we still have significant horizontal momentum
+            const hSpeed = Math.sqrt(p.vx*p.vx + p.vz*p.vz);
+            if (hSpeed > 0.5) {
+                // If Cold (Buoyancy > 0, down): reduce it to simulate clinging
+                if (effectiveBuoyancy > 0) effectiveBuoyancy *= 0.1;
+                // Add slight suction force towards ceiling
+                p.vy -= 8.0 * dt; 
+            }
+        }
+
+        p.vy += effectiveBuoyancy * dt;
+        
+        // Drag
+        p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
+        
+        // Integration
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+
+        // --- COLLISIONS ---
+        const damping = 0.8;
+        const turbulence = 2.0;
+
+        // X Walls
+        if (p.x < -rw/2) { p.x = -rw/2 + 1; p.vx = Math.abs(p.vx)*0.5 + Math.random()*turbulence; }
+        else if (p.x > rw/2) { p.x = rw/2 - 1; p.vx = -Math.abs(p.vx)*0.5 - Math.random()*turbulence; }
+        
+        // Z Walls
+        if (p.z < -rl/2) { p.z = -rl/2 + 1; p.vz = Math.abs(p.vz)*0.5 + Math.random()*turbulence; }
+        else if (p.z > rl/2) { p.z = rl/2 - 1; p.vz = -Math.abs(p.vz)*0.5 - Math.random()*turbulence; }
+
+        // Floor
+        if (p.y > floorY) {
+            p.y = floorY - 1;
+            p.vy = 0; // Stick/Spread on floor
+            p.vx += (Math.random() - 0.5) * 5; // Spread
+            p.vz += (Math.random() - 0.5) * 5;
+        }
+    }
 };

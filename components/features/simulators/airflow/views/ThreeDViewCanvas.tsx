@@ -1,8 +1,7 @@
-
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { CONSTANTS, Particle3D, ThreeDViewCanvasProps, project, spawnParticle } from '../utils/airflow3DLogic';
+import { CONSTANTS, Particle3D, ThreeDViewCanvasProps, project, spawnParticle, updateParticlePhysics, getGlowColor } from '../utils/airflow3DLogic';
 import ViewCube from './ViewCube';
-import { PerformanceResult, PlacedDiffuser } from '@/types';
+import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
 
 interface ExtendedThreeDProps extends ThreeDViewCanvasProps {
     placedDiffusers?: PlacedDiffuser[];
@@ -125,16 +124,12 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
 
         const PPM = (height / roomHeight) || 50; 
         const rw = roomWidth * PPM; const rl = roomLength * PPM; const rh = roomHeight * PPM;
-        
-        // COORD SYSTEM: Y=0 is Ceiling, Y=rh is Floor.
-        // Diffuser Spawning Height
         const dY_pos = (roomHeight - diffuserHeight) * PPM; 
         
         const fitScale = (Math.min(width, height) / Math.max(rw, rl, rh)) * 0.65;
         const finalScale = fitScale * camera.zoom;
-        const yOffset = -rh / 2; // Center the room vertically in 3D space
+        const yOffset = -rh / 2; 
 
-        // 3D Projector with centering
         const p3d = (x: number, y: number, z: number) => 
             project(x, -(y + yOffset), z, width, height, camera.rotX, camera.rotY, finalScale, camera.panX, camera.panY);
 
@@ -143,14 +138,11 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
             ctx.lineWidth = 1;
             const corners = [
-                // Ceiling Corners (y=0)
                 {x:-rw/2,y:0,z:-rl/2},{x:rw/2,y:0,z:-rl/2},{x:rw/2,y:0,z:rl/2},{x:-rw/2,y:0,z:rl/2},
-                // Floor Corners (y=rh)
                 {x:-rw/2,y:rh,z:-rl/2},{x:rw/2,y:rh,z:-rl/2},{x:rw/2,y:rh,z:rl/2},{x:-rw/2,y:rh,z:rl/2}
             ].map(v => p3d(v.x, v.y, v.z));
             
             ctx.beginPath();
-            // Connect Top Face (Ceiling)
             [0,4].forEach(start => {
                 ctx.moveTo(corners[start].x, corners[start].y);
                 ctx.lineTo(corners[start+1].x, corners[start+1].y);
@@ -158,16 +150,12 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
                 ctx.lineTo(corners[start+3].x, corners[start+3].y);
                 ctx.closePath();
             });
-            // Connect Pillars
             [0,1,2,3].forEach(i => { ctx.moveTo(corners[i].x, corners[i].y); ctx.lineTo(corners[i+4].x, corners[i+4].y); });
             ctx.stroke();
 
-            // Work Zone (if set)
             if (workZoneHeight > 0) {
-                // Work Zone Height is FROM FLOOR. So Y = RoomHeight - WorkZoneHeight
                 const wy = (roomHeight - workZoneHeight) * PPM; 
                 const wc = [{x:-rw/2,y:wy,z:-rl/2},{x:rw/2,y:wy,z:-rl/2},{x:rw/2,y:wy,z:rl/2},{x:-rw/2,y:wy,z:rl/2}].map(v => p3d(v.x, v.y, v.z));
-                
                 ctx.fillStyle = 'rgba(255, 200, 0, 0.05)';
                 ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)';
                 ctx.beginPath(); 
@@ -204,14 +192,12 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
         });
 
         if (isPowerOn && isPlaying && activeDiffusers.length > 0) {
-            // Aggregate spawn rate roughly
             const maxV0 = Math.max(...activeDiffusers.map(d => d.perf.v0 || 0));
             const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (maxV0 / 2) * CONSTANTS.SPAWN_RATE_MULTIPLIER);
             
             let spawned = 0;
             for (let i = 0; i < pool.length; i++) {
                 if (!pool[i].active) { 
-                    // Randomly select one source diffuser for this particle
                     const source = activeDiffusers[Math.floor(Math.random() * activeDiffusers.length)];
                     if (!source.perf.error) {
                         spawnParticle(pool[i], state, PPM, source.x, source.z, source.perf, source.modelId); 
@@ -230,88 +216,10 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
             if (!p.active) continue;
 
             if (isPlaying) {
-                p.age += dt;
-                if (p.isSuction) {
-                    // Simple suction logic: particles move towards source center
-                    // For better multi-diffuser suction, we'd need nearest neighbor search
-                    // Keeping simple drift for now
-                    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-                } else {
-                    // --- COANDA EFFECT (Ceiling) ---
-                    // If near ceiling (y approx 0) and moving horizontally, sticking force
-                    if (p.isHorizontal && p.y < rh * 0.15 && Math.abs(p.y) < 60) {
-                        const horizSpeed = Math.sqrt(p.vx*p.vx + p.vz*p.vz);
-                        if (horizSpeed > 0.5) {
-                            // Apply lift force towards ceiling (y=0)
-                            p.vy -= 10.0 * dt; 
-                            // Dampen vertical velocity slightly to "stick"
-                            p.vy *= 0.9;
-                        }
-                    }
+                // PHYSICS UPDATE (Externalized for logic sharing)
+                updateParticlePhysics(p, dt, 0, rh, rw, rl);
 
-                    // --- WALL JET EFFECT (Walls) ---
-                    // Inelastic collision: cancel normal velocity, keep tangential, add turbulence
-                    
-                    // X-Walls
-                    if (p.x < -rw/2) { 
-                        p.x = -rw/2 + 1; 
-                        p.vx = 0; // Kill normal velocity
-                        // Add turbulence simulating boundary layer separation/vortices
-                        p.vx += Math.random() * 2; 
-                        p.vy += (Math.random() - 0.5) * 2; 
-                        p.vz += (Math.random() - 0.5) * 2;
-                        // Friction
-                        p.vy *= 0.95; p.vz *= 0.95;
-                    }
-                    else if (p.x > rw/2) { 
-                        p.x = rw/2 - 1; 
-                        p.vx = 0;
-                        p.vx -= Math.random() * 2;
-                        p.vy += (Math.random() - 0.5) * 2; 
-                        p.vz += (Math.random() - 0.5) * 2;
-                        p.vy *= 0.95; p.vz *= 0.95;
-                    }
-                    
-                    // Z-Walls
-                    if (p.z < -rl/2) { 
-                        p.z = -rl/2 + 1; 
-                        p.vz = 0;
-                        p.vz += Math.random() * 2;
-                        p.vx += (Math.random() - 0.5) * 2;
-                        p.vy += (Math.random() - 0.5) * 2;
-                        p.vx *= 0.95; p.vy *= 0.95;
-                    }
-                    else if (p.z > rl/2) { 
-                        p.z = rl/2 - 1; 
-                        p.vz = 0;
-                        p.vz -= Math.random() * 2;
-                        p.vx += (Math.random() - 0.5) * 2;
-                        p.vy += (Math.random() - 0.5) * 2;
-                        p.vx *= 0.95; p.vy *= 0.95;
-                    }
-
-                    // --- FLOOR SPREADING (Floor) ---
-                    if (p.y > rh) {
-                        p.y = rh - 1;
-                        // Kill vertical momentum (no bounce)
-                        p.vy = 0; 
-                        // High friction on floor, but allow spreading
-                        p.vx *= 0.85;  
-                        p.vz *= 0.85;
-                        // Spread turbulence
-                        p.vx += (Math.random() - 0.5) * 3;
-                        p.vz += (Math.random() - 0.5) * 3;
-                    }
-
-                    // Buoyancy / General movement
-                    if (!p.isHorizontal || p.y > 60) {
-                         p.vy += p.buoyancy * dt; 
-                    }
-                    
-                    p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
-                    p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-                }
-
+                // History Tracking
                 if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
                     p.history.push({ x: p.x, y: p.y, z: p.z, age: p.age });
                     p.lastHistoryTime = p.age;
@@ -319,7 +227,6 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
                 }
             }
 
-            // Life Check
             if (p.age > p.life) {
                 p.active = false; continue;
             }
@@ -332,15 +239,12 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
                 const waveVal = Math.sin(p.age * p.waveFreq + p.wavePhase) * p.waveAmp * Math.min(p.age, 1.0);
                 const waveAngle = p.waveAngle || 0;
                 
-                // Volumetric Wave Logic
                 let wx = 0, wy = 0, wz = 0;
                 if (!p.isSuction) {
                     if (Math.abs(p.vy) > 0.5 * (Math.abs(p.vx) + Math.abs(p.vz))) { 
-                        // Vertical flow: wave in horizontal plane
                         wx = waveVal * Math.cos(waveAngle); 
                         wz = waveVal * Math.sin(waveAngle);
                     } else { 
-                        // Horizontal flow: wave in vertical axis
                         wy = waveVal; 
                     }
                 }
@@ -361,7 +265,6 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
                              hwy = hW; 
                         }
                     }
-                    
                     const prev = p3d(h.x + hwx, h.y + hwy, h.z + hwz);
                     ctx.lineTo(prev.x, prev.y);
                 }
@@ -390,4 +293,5 @@ const ThreeDViewCanvas: React.FC<ExtendedThreeDProps> = (props) => {
     );
 };
 
-export default React.memo(ThreeDViewCanvas);
+const MemoizedThreeDViewCanvas = React.memo(ThreeDViewCanvas);
+export default MemoizedThreeDViewCanvas;

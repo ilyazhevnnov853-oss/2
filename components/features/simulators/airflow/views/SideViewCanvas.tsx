@@ -1,7 +1,6 @@
-
 import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult, PlacedDiffuser } from '@/types';
-import { DIFFUSER_CATALOG } from '@/constants';
+import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
@@ -179,7 +178,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         const { ppm, originX, floorY, ceilingY } = getSideLayout(width, height, roomHeight, wallW);
         const rightWall = originX + wallW * ppm;
 
-        // --- GRID INIT (Double Buffer logic not strictly needed for this visual approx) ---
+        // --- GRID INIT ---
         const cols = Math.ceil(width / CONSTANTS.GRID_CELL_SIZE);
         const rows = Math.ceil(height / CONSTANTS.GRID_CELL_SIZE);
         if (!densityGrid.current || gridCols.current !== cols || gridRows.current !== rows) {
@@ -231,8 +230,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             });
         }
 
-        // --- FLUID SIMULATION: PASS 1 (Build Density Map) ---
-        // Only consider particles for density if they are "active"
+        // --- FLUID SIMULATION: PASS 1 ---
         if (isPlaying) {
             for (let i = 0; i < pool.length; i++) {
                 if (!pool[i].active) continue;
@@ -266,7 +264,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         ctx.globalCompositeOperation = 'screen';
         ctx.lineWidth = 1; ctx.lineCap = 'round';
 
-        // --- FLUID SIMULATION: PASS 2 (Update & Draw) ---
+        // --- FLUID SIMULATION: PASS 2 ---
         for (let i = 0; i < pool.length; i++) {
             const p = pool[i];
             if (!p.active) continue;
@@ -276,30 +274,19 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 if (p.isSuction) {
                     p.x += p.vx * dt; p.y += p.vy * dt;
                 } else {
-                    // --- PRESSURE REPULSION (Fluid Dynamics) ---
-                    // Don't repel newly spawned particles (allow stream formation)
                     if (p.age > 0.2) {
                         const gx = Math.floor(p.x / CONSTANTS.GRID_CELL_SIZE);
                         const gy = Math.floor(p.y / CONSTANTS.GRID_CELL_SIZE);
-                        
-                        // Check boundary for grid access
                         if (gx > 0 && gx < cols - 1 && gy > 0 && gy < rows - 1) {
                             const idx = gy * cols + gx;
-                            // Only apply pressure if density is high (stream core)
                             if (grid[idx] > 3) {
-                                // Calculate density gradient (approx pressure gradient)
                                 const densityLeft = grid[idx - 1];
                                 const densityRight = grid[idx + 1];
                                 const densityTop = grid[idx - cols];
                                 const densityBottom = grid[idx + cols];
-                                
-                                // Force direction: High Density -> Low Density
-                                // Fx ~ (DensityLeft - DensityRight)
                                 const forceX = (densityLeft - densityRight) * CONSTANTS.REPULSION_FORCE;
                                 const forceY = (densityTop - densityBottom) * CONSTANTS.REPULSION_FORCE;
-                                
-                                p.vx += forceX * dt;
-                                p.vy += forceY * dt;
+                                p.vx += forceX * dt; p.vy += forceY * dt;
                             }
                         }
                     }
@@ -317,15 +304,9 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                     p.vx *= p.drag; p.vy *= p.drag;
                     p.x += p.vx * dt; p.y += p.vy * dt;
 
-                    // --- BOUNDARY COLLISIONS ---
                     if (p.x < originX) { p.x = originX; p.vx *= -0.7; }
                     else if (p.x > rightWall) { p.x = rightWall; p.vx *= -0.7; }
-
-                    if (p.y > floorY) {
-                        p.y = floorY;
-                        p.vy *= -0.2; 
-                        p.vx *= 0.9;  
-                    }
+                    if (p.y > floorY) { p.y = floorY; p.vy *= -0.2; p.vx *= 0.9; }
                 }
 
                 if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
@@ -355,7 +336,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             }
         }
 
-        // Draw Diffusers UI
         ctx.globalCompositeOperation = 'source-over';
         activeDiffusers.forEach(ad => {
              const w = (ad.perf.spec?.A / 1000 * ppm) || 20;
@@ -378,4 +358,5 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     );
 };
 
-export default React.memo(SideViewCanvas);
+const MemoizedSideViewCanvas = React.memo(SideViewCanvas);
+export default MemoizedSideViewCanvas;

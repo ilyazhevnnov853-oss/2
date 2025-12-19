@@ -10,7 +10,7 @@ import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import { PlacedDiffuser, PerformanceResult } from '../../../../types';
 
-const Simulator = ({ onBack, onHome }: any) => {
+export default function Simulator({ onBack, onHome }: any) {
     // --- STATE ---
     const [viewSize, setViewSize] = useState({ w: 800, h: 600 });
     const containerRef = useRef<HTMLDivElement>(null);
@@ -254,16 +254,13 @@ const Simulator = ({ onBack, onHome }: any) => {
 
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
             v0, 
-            perf.spec.A * 1000000, // convert m2 to mm2 for this specific legacy func if needed, or check types. 
-            // Actually spec.f0 is m2. spec.A is mm dimension usually in older code? 
-            // In types.ts Spec.A is int (e.g. 198), likely diameter or linear? 
-            // Let's rely on f0 from spec for Area. 
-            // Actually calculateWorkzoneVelocityAndCoverage expects A in mm^2? 
-            // Let's use spec.f0 (m2) * 1e6
+            perf.spec.f0 * 1000000,
             params.diffuserHeight, 
             params.workZoneHeight,
-            2.0,
-            k_archimedes
+            params.isCeilingMounted,
+            flowType,
+            dt,
+            params.roomWidth
         );
 
         return { 
@@ -420,6 +417,4 @@ const Simulator = ({ onBack, onHome }: any) => {
             />
         </div>
     );
-};
-
-export default Simulator;
+}

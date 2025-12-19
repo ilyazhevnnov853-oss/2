@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wind, Calculator, BookOpen, ArrowRight, ChevronLeft, Zap, Users, Gauge, Volume2, GitMerge, CloudRain, Thermometer, Flame, ScrollText, Shapes, ArrowRightLeft } from 'lucide-react';
-import Simulator from './components/features/simulators/airflow/Simulator';
+import Simulator from './components/features/simulators/airflow/Simulator.tsx';
 import VelocityCalculator from './components/features/calculators/velocity/VelocityCalculator';
 import HeaterCalculator from './components/features/calculators/heater/HeaterCalculator';
 import AirExchangeCalculator from './components/features/calculators/exchange/AirExchangeCalculator';
