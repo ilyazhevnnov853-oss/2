@@ -1,11 +1,14 @@
 
 import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser } from '@/types';
+import { DIFFUSER_CATALOG } from '@/constants';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 3500, 
+  MAX_PARTICLES: 3500,
+  GRID_CELL_SIZE: 30, // Resolution for fluid pressure grid
+  REPULSION_FORCE: 15.0, // Strength of stream-stream repulsion
 };
 
 interface Particle {
@@ -73,6 +76,11 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     const simulationRef = useRef(props);
     const particlePool = useRef<Particle[]>([]);
     
+    // Physics Grid for SPH-like pressure simulation
+    const densityGrid = useRef<Float32Array | null>(null);
+    const gridCols = useRef(0);
+    const gridRows = useRef(0);
+    
     useEffect(() => {
         if (particlePool.current.length === 0) {
             for (let i = 0; i < CONSTANTS.MAX_PARTICLES; i++) {
@@ -87,15 +95,18 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
     useEffect(() => { simulationRef.current = props; }, [props]);
 
-    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number, spawnX: number, spawnY: number) => {
-        const { physics, temp, roomTemp, flowType, modelId } = state;
-        if (physics.error || !physics.spec) return;
+    const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number, spawnX: number, spawnY: number, perf: PerformanceResult, sourceModelId: string) => {
+        const { temp, roomTemp, roomHeight } = state;
+        
+        const model = DIFFUSER_CATALOG.find(m => m.id === sourceModelId);
+        const flowType = model ? model.modes[0].flowType : state.flowType;
 
-        const nozzleW = (physics.spec.A / 1000) * ppm;
-        const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
+        if (perf.error || !perf.spec) return;
+
+        const nozzleW = (perf.spec.A / 1000) * ppm;
+        const pxSpeed = (perf.v0 || 0) * ppm * 0.8;
         const dtTemp = temp - roomTemp;
         
-        // Эталонная формула плавучести
         const buoyancy = -(dtTemp / 293) * 9.81 * ppm * 4.0;
 
         let vx = 0, vy = 0, drag = 0.96, waveAmp = 5, waveFreq = 4 + Math.random() * 4, isHorizontal = false, isSuction = false;
@@ -108,7 +119,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             p.y = ceilingY + Math.random() * (state.roomHeight * ppm);
             const dx = spawnX - p.x; const dy = spawnY - p.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            const force = (physics.v0 * 500) / (dist + 10);
+            const force = (perf.v0 * 500) / (dist + 10);
             vx = (dx / dist) * force; vy = (dy / dist) * force;
             drag = 1.0; waveAmp = 0; p.life = 3.0; p.color = '150, 150, 150';
         } else if (flowType.includes('horizontal')) {
@@ -124,13 +135,13 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             const side = Math.random() > 0.5 ? 1 : -1;
             p.x = spawnX + side * (nozzleW * 0.55); p.y = spawnY;
             vx = side * pxSpeed * 1.0; vy = pxSpeed * 0.1;
-        } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
+        } else if (sourceModelId === 'dpu-m' && flowType.includes('vertical')) {
             const side = Math.random() > 0.5 ? 1 : -1;
             p.x = spawnX + side * (nozzleW * 0.45); p.y = spawnY;
             const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
             vx = side * Math.sin(coneAngle) * pxSpeed; vy = Math.cos(coneAngle) * pxSpeed;
             waveAmp = 5; drag = 0.95;
-        } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
+        } else if (sourceModelId === 'dpu-k' && flowType.includes('vertical')) {
             p.x = spawnX + (Math.random() - 0.5) * nozzleW * 0.95; p.y = spawnY;
             const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
             vx = Math.sin(spreadAngle) * pxSpeed * 0.8; vy = Math.cos(spreadAngle) * pxSpeed;
@@ -166,6 +177,18 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
         const wallW = viewAxis === 'front' ? roomWidth : roomLength;
         const { ppm, originX, floorY, ceilingY } = getSideLayout(width, height, roomHeight, wallW);
+        const rightWall = originX + wallW * ppm;
+
+        // --- GRID INIT (Double Buffer logic not strictly needed for this visual approx) ---
+        const cols = Math.ceil(width / CONSTANTS.GRID_CELL_SIZE);
+        const rows = Math.ceil(height / CONSTANTS.GRID_CELL_SIZE);
+        if (!densityGrid.current || gridCols.current !== cols || gridRows.current !== rows) {
+            densityGrid.current = new Float32Array(cols * rows);
+            gridCols.current = cols;
+            gridRows.current = rows;
+        }
+        const grid = densityGrid.current;
+        grid.fill(0); // Clear grid every frame
 
         // Background
         ctx.globalCompositeOperation = 'source-over';
@@ -185,31 +208,65 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         }
 
         const pool = particlePool.current;
-        const activeDiffusers: {x: number, y: number, spec: any}[] = [];
+        const activeDiffusers: {x: number, y: number, perf: PerformanceResult, modelId: string}[] = [];
         
         if (state.placedDiffusers && state.placedDiffusers.length > 0) {
             state.placedDiffusers.forEach(d => {
                 const posInWall = viewAxis === 'front' ? d.x : d.y;
                 const cx = originX + posInWall * ppm;
                 const cy = ceilingY + (roomHeight - diffuserHeight) * ppm;
-                if (state.selectedDiffuserId === d.id) activeDiffusers.push({ x: cx, y: cy + (d.performance.spec.D/1000 * ppm), spec: d.performance.spec });
+                activeDiffusers.push({ 
+                    x: cx, 
+                    y: cy + (d.performance.spec.D/1000 * ppm), 
+                    perf: d.performance,
+                    modelId: d.modelId
+                });
             });
         } else {
-            activeDiffusers.push({ x: originX + (wallW/2) * ppm, y: ceilingY + (roomHeight - diffuserHeight) * ppm + (state.physics.spec?.D/1000 * ppm || 10), spec: state.physics.spec });
+            activeDiffusers.push({ 
+                x: originX + (wallW/2) * ppm, 
+                y: ceilingY + (roomHeight - diffuserHeight) * ppm + (state.physics.spec?.D/1000 * ppm || 10), 
+                perf: state.physics,
+                modelId: state.modelId
+            });
         }
 
-        if (isPowerOn && isPlaying && !state.physics.error && activeDiffusers.length > 0) {
-            const spawnRate = Math.ceil(5 + (state.physics.v0 / 2) * 8);
-            let spawned = 0;
-            const source = activeDiffusers[0];
+        // --- FLUID SIMULATION: PASS 1 (Build Density Map) ---
+        // Only consider particles for density if they are "active"
+        if (isPlaying) {
             for (let i = 0; i < pool.length; i++) {
-                if (!pool[i].active) { spawnParticle(pool[i], state, ppm, source.x, source.y); spawned++; if (spawned >= spawnRate) break; }
+                if (!pool[i].active) continue;
+                const p = pool[i];
+                const gx = Math.floor(p.x / CONSTANTS.GRID_CELL_SIZE);
+                const gy = Math.floor(p.y / CONSTANTS.GRID_CELL_SIZE);
+                if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
+                    grid[gy * cols + gx] += 1;
+                }
+            }
+        }
+
+        // --- SPAWN PARTICLES ---
+        if (isPowerOn && isPlaying && activeDiffusers.length > 0) {
+            const maxV0 = Math.max(...activeDiffusers.map(d => d.perf.v0 || 0));
+            const spawnRate = Math.ceil(5 + (maxV0 / 2) * 8);
+            let spawned = 0;
+            
+            for (let i = 0; i < pool.length; i++) {
+                if (!pool[i].active) { 
+                    const source = activeDiffusers[Math.floor(Math.random() * activeDiffusers.length)];
+                    if (source.perf && !source.perf.error) {
+                        spawnParticle(pool[i], state, ppm, source.x, source.y, source.perf, source.modelId); 
+                        spawned++; 
+                    }
+                    if (spawned >= spawnRate) break; 
+                }
             }
         }
 
         ctx.globalCompositeOperation = 'screen';
         ctx.lineWidth = 1; ctx.lineCap = 'round';
 
+        // --- FLUID SIMULATION: PASS 2 (Update & Draw) ---
         for (let i = 0; i < pool.length; i++) {
             const p = pool[i];
             if (!p.active) continue;
@@ -217,20 +274,58 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             if (isPlaying) {
                 p.age += dt;
                 if (p.isSuction) {
-                    const source = activeDiffusers[0];
-                    const dx = source.x - p.x; const dy = source.y - p.y;
-                    const distSq = dx*dx + dy*dy; const dist = Math.sqrt(distSq);
-                    if (dist < 20) { p.active = false; continue; }
-                    const force = (state.physics.v0 * 2000) / (distSq + 100);
-                    p.vx += (dx / dist) * force * dt; p.vy += (dy / dist) * force * dt;
-                    p.x += p.vx; p.y += p.vy;
+                    p.x += p.vx * dt; p.y += p.vy * dt;
                 } else {
+                    // --- PRESSURE REPULSION (Fluid Dynamics) ---
+                    // Don't repel newly spawned particles (allow stream formation)
+                    if (p.age > 0.2) {
+                        const gx = Math.floor(p.x / CONSTANTS.GRID_CELL_SIZE);
+                        const gy = Math.floor(p.y / CONSTANTS.GRID_CELL_SIZE);
+                        
+                        // Check boundary for grid access
+                        if (gx > 0 && gx < cols - 1 && gy > 0 && gy < rows - 1) {
+                            const idx = gy * cols + gx;
+                            // Only apply pressure if density is high (stream core)
+                            if (grid[idx] > 3) {
+                                // Calculate density gradient (approx pressure gradient)
+                                const densityLeft = grid[idx - 1];
+                                const densityRight = grid[idx + 1];
+                                const densityTop = grid[idx - cols];
+                                const densityBottom = grid[idx + cols];
+                                
+                                // Force direction: High Density -> Low Density
+                                // Fx ~ (DensityLeft - DensityRight)
+                                const forceX = (densityLeft - densityRight) * CONSTANTS.REPULSION_FORCE;
+                                const forceY = (densityTop - densityBottom) * CONSTANTS.REPULSION_FORCE;
+                                
+                                p.vx += forceX * dt;
+                                p.vy += forceY * dt;
+                            }
+                        }
+                    }
+
                     if (p.isHorizontal) {
-                        if (p.y < (height * 0.15) && Math.abs(p.vx) > 0.3) { p.vy += (0 - p.y) * 5.0 * dt; } 
-                        else { p.vy += p.buoyancy * dt * 0.5; }
-                    } else { p.vy += p.buoyancy * dt; }
+                        if (Math.abs(p.y - ceilingY) < (roomHeight * ppm * 0.15) && Math.abs(p.vx) > 0.3) { 
+                            p.vy += (ceilingY - p.y) * 5.0 * dt; 
+                        } else { 
+                            p.vy += p.buoyancy * dt * 0.5; 
+                        }
+                    } else { 
+                        p.vy += p.buoyancy * dt; 
+                    }
+                    
                     p.vx *= p.drag; p.vy *= p.drag;
                     p.x += p.vx * dt; p.y += p.vy * dt;
+
+                    // --- BOUNDARY COLLISIONS ---
+                    if (p.x < originX) { p.x = originX; p.vx *= -0.7; }
+                    else if (p.x > rightWall) { p.x = rightWall; p.vx *= -0.7; }
+
+                    if (p.y > floorY) {
+                        p.y = floorY;
+                        p.vy *= -0.2; 
+                        p.vx *= 0.9;  
+                    }
                 }
 
                 if (p.age - p.lastHistoryTime >= CONSTANTS.HISTORY_RECORD_INTERVAL) {
@@ -240,7 +335,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 }
             }
 
-            if (p.age > p.life || p.y > floorY || p.x < originX || p.x > originX + wallW * ppm || p.y < ceilingY - 100) {
+            if (p.age > p.life || p.y < ceilingY - 100) {
                 p.active = false; continue;
             }
 
@@ -263,9 +358,9 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         // Draw Diffusers UI
         ctx.globalCompositeOperation = 'source-over';
         activeDiffusers.forEach(ad => {
-             const w = (ad.spec?.A / 1000 * ppm) || 20;
+             const w = (ad.perf.spec?.A / 1000 * ppm) || 20;
              ctx.fillStyle = '#475569';
-             ctx.fillRect(ad.x - w/2, ceilingY + (roomHeight - diffuserHeight) * ppm, w, (ad.spec?.D/1000 * ppm) || 10);
+             ctx.fillRect(ad.x - w/2, ceilingY + (roomHeight - diffuserHeight) * ppm, w, (ad.perf.spec?.D/1000 * ppm) || 10);
         });
 
         requestRef.current = requestAnimationFrame(animate);
