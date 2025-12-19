@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useMemo, useCallback } from 'react';
 import { Fan, ScanLine, Wind, Thermometer, Home, CheckCircle2, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
@@ -16,35 +17,54 @@ export const SimulatorLeftPanel = ({
     onAddDiffuser, isSingleMode
 }: any) => {
 
-    const handleModelChange = (id: string) => {
+    // Memoize available diameters for the current model to avoid recalculating on every render
+    const availableDiameters = useMemo(() => {
+        return Object.keys(SPECS).filter(d => {
+            const val = !isNaN(Number(d)) ? Number(d) : d;
+            // Check if this diameter is valid for the current model & flow type
+            // using a dummy volume (100) just to check existence in ENGINEERING_DATA
+            return calculatePerformance(params.modelId, currentMode.flowType, val, 100) !== null;
+        });
+    }, [params.modelId, currentMode.flowType]);
+
+    const handleModelChange = useCallback((id: string) => {
+        const model = DIFFUSER_CATALOG.find(m => m.id === id);
+        if (!model) return;
+
+        // Find the first valid diameter for the new model
+        const firstValidMode = model.modes[0];
         const validDiameter = Object.keys(SPECS).find(d => {
             const val = !isNaN(Number(d)) ? Number(d) : d;
-            const model = DIFFUSER_CATALOG.find(m => m.id === id);
-            if (!model) return false;
-            return calculatePerformance(id, model.modes[0].flowType, val, 100) !== null;
+            return calculatePerformance(id, firstValidMode.flowType, val, 100) !== null;
         });
+
         const newDiameter = validDiameter ? (!isNaN(Number(validDiameter)) ? Number(validDiameter) : validDiameter) : '';
         
-        let newVol = params.volume;
-        if (newDiameter && SPECS[newDiameter]) {
-             const { min, max } = SPECS[newDiameter];
-             if (newVol < min) newVol = min;
-             if (newVol > max) newVol = max;
-        }
-        setParams(p => ({ ...p, modelId: id, modeIdx: 0, diameter: newDiameter, volume: newVol }));
+        setParams((p: any) => {
+            let newVol = p.volume;
+            // Adjust volume to new spec limits if necessary
+            if (newDiameter && SPECS[newDiameter]) {
+                 const { min, max } = SPECS[newDiameter];
+                 if (newVol < min) newVol = min;
+                 if (newVol > max) newVol = max;
+            }
+            return { ...p, modelId: id, modeIdx: 0, diameter: newDiameter, volume: newVol };
+        });
         setSizeSelected(!!newDiameter);
-    };
+    }, [setParams, setSizeSelected]);
 
-    const handleSizeSelect = (d: string | number) => {
-        let newVol = params.volume;
-        if (d && SPECS[d]) {
-             const { min, max } = SPECS[d];
-             if (newVol < min) newVol = min;
-             if (newVol > max) newVol = max;
-        }
-        setParams(p => ({ ...p, diameter: d, volume: newVol }));
+    const handleSizeSelect = useCallback((d: string | number) => {
+        setParams((p: any) => {
+            let newVol = p.volume;
+            if (d && SPECS[d]) {
+                 const { min, max } = SPECS[d];
+                 if (newVol < min) newVol = min;
+                 if (newVol > max) newVol = max;
+            }
+            return { ...p, diameter: d, volume: newVol };
+        });
         setSizeSelected(true);
-    };
+    }, [setParams, setSizeSelected]);
 
     return (
         <>
@@ -120,16 +140,24 @@ export const SimulatorLeftPanel = ({
                                     {!sizeSelected && <span className="text-[9px] text-amber-500 font-bold animate-pulse flex items-center gap-1"><AlertTriangle size={10}/> Выберите размер</span>}
                                 </div>
                                 <div className="flex flex-wrap gap-2">
-                                    {Object.keys(SPECS).map(d => {
+                                    {availableDiameters.map(d => {
                                         const val = !isNaN(Number(d)) ? Number(d) : d;
-                                        if (calculatePerformance(params.modelId, currentMode.flowType, val, 100) === null) return null;
-                                        return <button key={d} onClick={() => handleSizeSelect(val)} className={`px-4 py-2.5 rounded-xl text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-transparent shadow-[0_0_15px_rgba(0,0,0,0.2)] dark:shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105' : 'bg-white dark:bg-white/5 text-slate-500 border-black/5 dark:border-transparent hover:bg-black/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'}`}>{d}</button>;
+                                        return (
+                                            <button 
+                                                key={d} 
+                                                onClick={() => handleSizeSelect(val)} 
+                                                className={`px-4 py-2.5 rounded-xl text-[10px] font-bold font-mono transition-all border ${params.diameter === val ? 'bg-slate-900 dark:bg-white text-white dark:text-black border-transparent shadow-[0_0_15px_rgba(0,0,0,0.2)] dark:shadow-[0_0_15px_rgba(255,255,255,0.4)] scale-105' : 'bg-white dark:bg-white/5 text-slate-500 border-black/5 dark:border-transparent hover:bg-black/5 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white'}`}
+                                            >
+                                                {d}
+                                            </button>
+                                        );
                                     })}
+                                    {availableDiameters.length === 0 && <span className="text-[10px] text-slate-500 italic">Нет доступных размеров</span>}
                                 </div>
                             </div>
                             <div className="space-y-6">
-                                <GlassSlider label="Расход воздуха" icon={<Wind size={14}/>} val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч" onChange={(v: number) => setParams(p => ({...p, volume: v}))}/>
-                                <GlassSlider label="Т° Притока" icon={<Thermometer size={14}/>} val={params.temperature} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, temperature: v}))} color="temp"/>
+                                <GlassSlider label="Расход воздуха" icon={<Wind size={14}/>} val={params.volume} min={physics.spec.min || 50} max={(physics.spec.max || 1000) * 1.5} step={10} unit=" м³/ч" onChange={(v: number) => setParams((p: any) => ({...p, volume: v}))}/>
+                                <GlassSlider label="Т° Притока" icon={<Thermometer size={14}/>} val={params.temperature} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams((p: any) => ({...p, temperature: v}))} color="temp"/>
                             </div>
                         </AccordionItem>
 
@@ -148,9 +176,9 @@ export const SimulatorLeftPanel = ({
                                             value={(params as any)[key]} 
                                             onChange={(e) => {
                                                 const val = Number(e.target.value);
-                                                setParams(p => {
+                                                setParams((p: any) => {
                                                     const updates: any = { [key]: val };
-                                                    // Sync diffuser height with room height automatically
+                                                    // Sync diffuser height with room height automatically if it exceeds or was aligned
                                                     if (key === 'roomHeight') updates.diffuserHeight = val;
                                                     return { ...p, ...updates };
                                                 });
@@ -177,7 +205,7 @@ export const SimulatorLeftPanel = ({
                                 </div>
                             </div>
 
-                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))} color="temp"/>
+                            <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams((p: any) => ({...p, roomTemp: v}))} color="temp"/>
                         </AccordionItem>
                     </div>
 
