@@ -1,0 +1,3 @@
+## 2025-10-27 - Icon-Only Button Accessibility Pattern
+**Learning:** Many "Glass" styled icon-only buttons in the UI lack `aria-label` attributes, relying solely on visual icons. This makes them inaccessible to screen readers.
+**Action:** Update the `GlassButton` component to accept an optional `ariaLabel` prop. Ensure this prop is used to populate `aria-label` on the button element. If `label` is provided, it acts as the accessible name. If `label` is missing (icon-only), `ariaLabel` MUST be provided. Audit all usages of `GlassButton` without visible labels and add descriptive `ariaLabel` props. Also apply this pattern to `GlassSlider` and other interactive inputs.
