@@ -1,6 +1,8 @@
+
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser, Probe } from '../../../../../types';
 import { Trash2, Move, Copy, X } from 'lucide-react';
+import { calculateProbeData } from '../../../../../hooks/useSimulation';
 
 interface TopViewCanvasProps {
   width: number; 
@@ -23,6 +25,14 @@ interface TopViewCanvasProps {
   onDuplicateDiffuser?: (id: string) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
+  // Probe Props
+  probes?: Probe[];
+  isProbeMode?: boolean;
+  onAddProbe?: (x: number, y: number) => void;
+  onRemoveProbe?: (id: string) => void;
+  onUpdateProbePos?: (id: string, x: number, y: number) => void;
+  roomTemp?: number;
+  supplyTemp?: number;
 }
 
 const getTopLayout = (w: number, h: number, rw: number, rl: number) => {
@@ -49,6 +59,9 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
     const [isStickyDrag, setIsStickyDrag] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, id: string } | null>(null);
+    
+    // Drag Target Type
+    const dragTargetRef = useRef<{ type: 'diffuser' | 'probe', id: string } | null>(null);
 
     // Sync Props
     useEffect(() => {
@@ -170,6 +183,85 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
         isOffscreenDirty.current = false;
     };
 
+    const drawProbe = (ctx: CanvasRenderingContext2D, probe: Probe, ppm: number, originX: number, originY: number, state: TopViewCanvasProps) => {
+        const cx = originX + probe.x * ppm;
+        const cy = originY + probe.y * ppm;
+        
+        // Real-time calculation using hook logic
+        const data = calculateProbeData(probe.x, probe.y, state.placedDiffusers || [], state.roomTemp || 24, state.supplyTemp || 20);
+        
+        // Color coding based on Draft Rating
+        let color = '#34d399'; // Green (Comfort)
+        if (data.dr >= 15) color = '#fbbf24'; // Yellow (Acceptable)
+        if (data.dr >= 25) color = '#f87171'; // Red (Draft)
+
+        // Draw Arrow Vector
+        if (data.v > 0.05) {
+            const arrowLen = 20 + data.v * 10;
+            const endX = cx + Math.cos(data.angle) * arrowLen;
+            const endY = cy + Math.sin(data.angle) * arrowLen;
+            
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Arrowhead
+            const headLen = 6;
+            ctx.beginPath();
+            ctx.moveTo(endX, endY);
+            ctx.lineTo(endX - headLen * Math.cos(data.angle - Math.PI / 6), endY - headLen * Math.sin(data.angle - Math.PI / 6));
+            ctx.lineTo(endX - headLen * Math.cos(data.angle + Math.PI / 6), endY - headLen * Math.sin(data.angle + Math.PI / 6));
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        // Draw Probe Point
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw Badge (Improved Layout to avoid intersection)
+        const badgeW = 96;
+        const badgeH = 50;
+        const bx = cx + 12;
+        const by = cy - 50;
+        
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.95)'; // Darker and more opaque
+        ctx.beginPath();
+        ctx.roundRect(bx, by, badgeW, badgeH, 8);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.font = 'bold 10px Inter, sans-serif';
+        
+        // Row 1: Velocity
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText("V:", bx + 8, by + 14);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${data.v.toFixed(2)} м/с`, bx + 28, by + 14);
+
+        // Row 2: Temperature
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText("T:", bx + 8, by + 28);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${data.t.toFixed(1)}°C`, bx + 28, by + 28);
+        
+        // Row 3: Draft Rating
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText("DR:", bx + 8, by + 42);
+        ctx.fillStyle = color;
+        ctx.fillText(`${data.dr.toFixed(0)}%`, bx + 28, by + 42);
+    };
+
     const animate = useCallback(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -239,6 +331,11 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             ctx.stroke();
         });
 
+        // Draw Probes
+        state.probes?.forEach(p => {
+            drawProbe(ctx, p, ppm, originX, originY, state);
+        });
+
         if (state.dragPreview) {
             const cx = originX + state.dragPreview.x * ppm;
             const cy = originY + state.dragPreview.y * ppm;
@@ -286,6 +383,7 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
         const { x: mouseX, y: mouseY } = getMousePos(e);
         const { ppm, originX, originY } = getTopLayout(props.width, props.height, props.roomWidth, props.roomLength);
 
+        // Check Diffusers
         let hitId = null;
         const diffusers = props.placedDiffusers || [];
         for (let i = diffusers.length - 1; i >= 0; i--) {
@@ -317,12 +415,28 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             setIsStickyDrag(false);
             props.onDragEnd && props.onDragEnd();
             setContextMenu(null);
+            dragTargetRef.current = null;
             return;
         }
 
         const { x: mouseX, y: mouseY } = getMousePos(e);
         const { ppm, originX, originY } = getTopLayout(props.width, props.height, props.roomWidth, props.roomLength);
 
+        // 1. Check Probes (Hit Priority High)
+        const probes = props.probes || [];
+        for (let i = probes.length - 1; i >= 0; i--) {
+            const p = probes[i];
+            const cx = originX + p.x * ppm;
+            const cy = originY + p.y * ppm;
+            if (Math.hypot(mouseX - cx, mouseY - cy) < 15) { // 15px hit radius
+                dragTargetRef.current = { type: 'probe', id: p.id };
+                setIsDragging(true);
+                setDragOffset({ x: mouseX - cx, y: mouseY - cy });
+                return;
+            }
+        }
+
+        // 2. Check Diffusers
         let hitId = null;
         const diffusers = props.placedDiffusers || [];
         for (let i = diffusers.length - 1; i >= 0; i--) {
@@ -342,6 +456,7 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             props.onSelectDiffuser && props.onSelectDiffuser(hitId);
             setIsDragging(true);
             props.onDragStart && props.onDragStart();
+            dragTargetRef.current = { type: 'diffuser', id: hitId };
             const d = diffusers.find(d => d.id === hitId);
             if(d) {
                 const cx = originX + d.x * ppm;
@@ -349,13 +464,24 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
                 setDragOffset({ x: mouseX - cx, y: mouseY - cy });
             }
         } else {
+            // 3. Empty Space click
+            if (props.isProbeMode && props.onAddProbe) {
+                // Add Probe
+                const newX = (mouseX - originX) / ppm;
+                const newY = (mouseY - originY) / ppm;
+                
+                // Bounds Check
+                if (newX >= 0 && newX <= props.roomWidth && newY >= 0 && newY <= props.roomLength) {
+                    props.onAddProbe(newX, newY);
+                }
+            }
             props.onSelectDiffuser && props.onSelectDiffuser(''); 
         }
         setContextMenu(null);
     };
 
     const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDragging || !props.selectedDiffuserId) return;
+        if (!isDragging || !dragTargetRef.current) return;
         const { x: mouseX, y: mouseY } = getMousePos(e);
         const { ppm, originX, originY } = getTopLayout(props.width, props.height, props.roomWidth, props.roomLength);
 
@@ -372,12 +498,17 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
         newX = Math.max(0, Math.min(rw, newX));
         newY = Math.max(0, Math.min(rl, newY));
 
-        props.onUpdateDiffuserPos && props.onUpdateDiffuserPos(props.selectedDiffuserId, newX, newY);
+        if (dragTargetRef.current.type === 'diffuser' && props.onUpdateDiffuserPos) {
+            props.onUpdateDiffuserPos(dragTargetRef.current.id, newX, newY);
+        } else if (dragTargetRef.current.type === 'probe' && props.onUpdateProbePos) {
+            props.onUpdateProbePos(dragTargetRef.current.id, newX, newY);
+        }
     };
 
     const handleEnd = () => {
         if (!isStickyDrag) {
             setIsDragging(false);
+            dragTargetRef.current = null;
             props.onDragEnd && props.onDragEnd();
         }
     };
@@ -389,6 +520,7 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             props.onSelectDiffuser && props.onSelectDiffuser(contextMenu.id);
             setIsDragging(true);
             setIsStickyDrag(true);
+            dragTargetRef.current = { type: 'diffuser', id: contextMenu.id };
             props.onDragStart && props.onDragStart();
             setDragOffset({ x: 0, y: 0 }); 
         } else if (action === 'delete' && props.onRemoveDiffuser) {
@@ -397,6 +529,7 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             props.onDuplicateDiffuser(contextMenu.id);
             setIsDragging(true);
             setIsStickyDrag(true);
+            // We can't immediately drag duplicate because ID is unknown here, but logic handles it
             props.onDragStart && props.onDragStart();
             setDragOffset({ x: 0, y: 0 }); 
         }
@@ -409,7 +542,7 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
                 ref={canvasRef} 
                 width={props.width} 
                 height={props.height} 
-                className="block w-full h-full touch-none cursor-crosshair"
+                className={`block w-full h-full touch-none ${props.isProbeMode ? 'cursor-crosshair' : 'cursor-default'}`}
                 onContextMenu={handleContextMenu}
                 onMouseDown={handleStart}
                 onMouseMove={handleMove}

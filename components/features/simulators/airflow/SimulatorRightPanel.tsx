@@ -1,21 +1,38 @@
-import React from 'react';
-import { Maximize, LayoutList, ScanLine, Ruler, Wind, X } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { Maximize, LayoutList, ScanLine, Ruler, Wind, X, Target, Trash2 } from 'lucide-react';
 import { SectionHeader } from '../../../ui/Shared';
-import { InfoRow } from './SimulatorUI';
+import { InfoRow, AccordionItem } from './SimulatorUI';
+import { calculateProbeData } from '../../../../hooks/useSimulation';
 
 export const SimulatorRightPanel = ({ 
     viewMode, physics, params, placedDiffusers, topViewStats, coverageAnalysis, 
     isMobileStatsOpen, setIsMobileStatsOpen,
-    isHelpMode
+    isHelpMode,
+    probes, onRemoveProbe
 }: any) => {
+
+    const [sections, setSections] = useState({
+        results: true,
+        params: true,
+        summary: true,
+        probes: true,
+        coverage: true
+    });
+
+    const toggle = (key: string) => setSections((prev: any) => ({ ...prev, [key]: !prev[key] }));
 
     const Content = () => (
         <>
             {viewMode !== 'top' ? (
-                <div className="space-y-6 animate-in slide-in-from-right-8 duration-500 relative z-10">
-                        <div>
-                        <SectionHeader icon={<Maximize size={16}/>} title="Результаты" />
-                        <div className="mt-4 bg-gradient-to-br from-white/5 to-transparent rounded-[24px] p-6 border border-white/5 shadow-inner relative overflow-hidden group">
+                <div className="space-y-4 animate-in slide-in-from-right-8 duration-500 relative z-10">
+                    <AccordionItem 
+                        title="Результаты" 
+                        icon={<Maximize size={16}/>} 
+                        isOpen={sections.results} 
+                        onClick={() => toggle('results')}
+                    >
+                        <div className="mt-0 bg-gradient-to-br from-white/5 to-transparent rounded-[24px] p-6 border border-white/5 shadow-inner relative overflow-hidden group">
                             <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/20 rounded-full blur-[40px] group-hover:bg-blue-500/30 transition-colors"></div>
                             
                             <div className="text-center pb-6 mb-4 border-b border-white/5 relative z-10">
@@ -28,22 +45,30 @@ export const SimulatorRightPanel = ({
                                 <InfoRow label="В Рабочей Зоне" value={physics.workzoneVelocity.toFixed(2)} unit="м/с" subValue="Максимальная" />
                             </div>
                         </div>
-                    </div>
+                    </AccordionItem>
                     
-                    <div>
-                        <SectionHeader icon={<LayoutList size={16}/>} title="Параметры" />
-                        <div className="mt-4 bg-black/20 rounded-[24px] p-2 border border-white/5">
+                    <AccordionItem 
+                        title="Параметры" 
+                        icon={<LayoutList size={16}/>} 
+                        isOpen={sections.params} 
+                        onClick={() => toggle('params')}
+                    >
+                        <div className="mt-0 bg-black/20 rounded-[24px] p-2 border border-white/5">
                             <InfoRow label="Т° Помещения" value={params.roomTemp} unit="°C" />
                             <InfoRow label="Т° Притока" value={params.temperature} unit="°C" highlight />
                             <InfoRow label="Объем Воздуха" value={params.volume} unit="м³/ч" />
                         </div>
-                    </div>
+                    </AccordionItem>
                 </div>
             ) : (
-                <div className="space-y-6 animate-in slide-in-from-right-8 duration-500 relative z-10">
-                    <div>
-                        <SectionHeader icon={<ScanLine size={16}/>} title="Сводка по плану" />
-                        <div className="mt-4 bg-[#13141c] rounded-[24px] p-6 border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] relative overflow-hidden">
+                <div className="space-y-4 animate-in slide-in-from-right-8 duration-500 relative z-10">
+                    <AccordionItem 
+                        title="Сводка по плану" 
+                        icon={<ScanLine size={16}/>} 
+                        isOpen={sections.summary} 
+                        onClick={() => toggle('summary')}
+                    >
+                        <div className="mt-0 bg-[#13141c] rounded-[24px] p-6 border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.4)] relative overflow-hidden">
                             <div className="absolute -top-20 -right-20 w-48 h-48 bg-purple-500/10 rounded-full blur-[60px]"></div>
                             
                             <div className="flex flex-col items-end mb-6 relative z-10">
@@ -56,11 +81,63 @@ export const SimulatorRightPanel = ({
                                 <InfoRow label="Т° Смешения" value={topViewStats.calcTemp.toFixed(1)} unit="°C" highlight />
                             </div>
                         </div>
-                    </div>
+                    </AccordionItem>
 
-                    <div>
-                        <SectionHeader icon={<Ruler size={16}/>} title="Анализ покрытия" />
-                        <div className="mt-4 bg-black/20 rounded-[24px] p-2 border border-white/5">
+                    {/* PROBES LIST SECTION */}
+                    {probes && probes.length > 0 && (
+                        <AccordionItem 
+                            title="Точки измерения" 
+                            icon={<Target size={16}/>} 
+                            isOpen={sections.probes} 
+                            onClick={() => toggle('probes')}
+                        >
+                            <div className="mt-0 space-y-3">
+                                {probes.map((probe: any, idx: number) => {
+                                    // Calculate realtime data for list view
+                                    const data = calculateProbeData(probe.x, probe.y, placedDiffusers, params.roomTemp, params.temperature);
+                                    const drColor = data.dr < 15 ? 'text-emerald-400' : data.dr < 25 ? 'text-amber-400' : 'text-red-400';
+                                    
+                                    return (
+                                        <div key={probe.id} className="bg-black/20 rounded-xl p-3 border border-white/5 hover:bg-white/5 transition-colors group">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-slate-400">
+                                                        {idx + 1}
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Точка {idx + 1}</span>
+                                                </div>
+                                                <button onClick={() => onRemoveProbe(probe.id)} className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div className="text-center bg-white/5 rounded-lg p-1.5">
+                                                    <div className="text-[9px] text-slate-500 mb-0.5">V (м/с)</div>
+                                                    <div className="font-mono font-bold text-xs text-white">{data.v.toFixed(2)}</div>
+                                                </div>
+                                                <div className="text-center bg-white/5 rounded-lg p-1.5">
+                                                    <div className="text-[9px] text-slate-500 mb-0.5">T (°C)</div>
+                                                    <div className="font-mono font-bold text-xs text-white">{data.t.toFixed(1)}</div>
+                                                </div>
+                                                <div className="text-center bg-white/5 rounded-lg p-1.5 border border-white/5">
+                                                    <div className="text-[9px] text-slate-500 mb-0.5">DR (%)</div>
+                                                    <div className={`font-mono font-bold text-xs ${drColor}`}>{data.dr.toFixed(0)}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </AccordionItem>
+                    )}
+
+                    <AccordionItem 
+                        title="Анализ покрытия" 
+                        icon={<Ruler size={16}/>} 
+                        isOpen={sections.coverage} 
+                        onClick={() => toggle('coverage')}
+                    >
+                        <div className="mt-0 bg-black/20 rounded-[24px] p-2 border border-white/5">
                                 <InfoRow 
                                 label="Покрытие РЗ" 
                                 value={coverageAnalysis.totalCoverage.toFixed(0)} unit="%" 
@@ -71,7 +148,7 @@ export const SimulatorRightPanel = ({
                                 value={coverageAnalysis.avgVelocity.toFixed(2)} unit="м/с" 
                             />
                         </div>
-                    </div>
+                    </AccordionItem>
                 </div>
             )}
         </>

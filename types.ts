@@ -1,3 +1,4 @@
+
 import { ReactNode } from 'react';
 
 export interface Spec {
@@ -69,6 +70,19 @@ export interface PlacedDiffuser {
   diameter: number | string;
   volume: number;
   performance: PerformanceResult;
+}
+
+export interface Probe {
+  id: string;
+  x: number; // Position X (meters)
+  y: number; // Position Y (meters)
+}
+
+export interface ProbeData {
+  v: number;    // Velocity m/s
+  t: number;    // Temperature C
+  angle: number; // Flow direction in radians
+  dr: number;   // Draft Rating %
 }
 
 export interface WikiContentBlock {

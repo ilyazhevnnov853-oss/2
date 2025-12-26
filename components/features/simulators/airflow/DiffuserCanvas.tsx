@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { PerformanceResult, PlacedDiffuser } from '../../../../types';
+import { PerformanceResult, PlacedDiffuser, Probe } from '../../../../types';
 import SideViewCanvas from './views/SideViewCanvas';
 import TopViewCanvas from './views/TopViewCanvas';
 import ThreeDViewCanvas from './views/ThreeDViewCanvas';
@@ -36,6 +37,12 @@ interface DiffuserCanvasProps {
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
+  // Probe Props
+  probes?: Probe[];
+  isProbeMode?: boolean;
+  onAddProbe?: (x: number, y: number) => void;
+  onRemoveProbe?: (id: string) => void;
+  onUpdateProbePos?: (id: string, x: number, y: number) => void;
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -83,6 +90,15 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 onDuplicateDiffuser={props.onDuplicateDiffuser}
                 onDragStart={props.onDragStart}
                 onDragEnd={props.onDragEnd}
+                // Pass Probe props
+                probes={props.probes}
+                isProbeMode={props.isProbeMode}
+                onAddProbe={props.onAddProbe}
+                onRemoveProbe={props.onRemoveProbe}
+                onUpdateProbePos={props.onUpdateProbePos}
+                // Pass Simulation Params for Calculation
+                roomTemp={props.roomTemp}
+                supplyTemp={props.temp}
             />
         );
     } else if (props.viewMode === '3d') {

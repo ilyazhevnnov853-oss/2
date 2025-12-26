@@ -1,6 +1,7 @@
+
 import { useMemo } from 'react';
 import { SPECS, ENGINEERING_DATA } from '../constants';
-import { PerformanceResult, Spec } from '../types';
+import { PerformanceResult, Spec, PlacedDiffuser, ProbeData } from '../types';
 
 // ==========================================
 // 4. PHYSICS & SIMULATION LOGIC
@@ -12,14 +13,13 @@ export const interpolate = (val: number, x0: number, x1: number, y0: number, y1:
 };
 
 // --- ГЛАВНАЯ ФУНКЦИЯ РАСЧЕТА СКОРОСТИ ---
-// Теперь принимает buoyancyFactor, чтобы температура влияла на результат
 export const calculateWorkzoneVelocityAndCoverage = (
     v0: number, 
     spec_A: number, // Ak (Effective Area) in mm²
     diffuserHeight: number, 
     workZoneHeight: number,
     m: number = 2.0, // Аэродинамический коэффициент формы
-    buoyancyFactor: number = 1.0 // <--- НОВЫЙ ПАРАМЕТР: Влияние температуры
+    buoyancyFactor: number = 1.0 
 ) => {
     const dist = diffuserHeight - workZoneHeight;
     
@@ -47,11 +47,9 @@ export const calculateWorkzoneVelocityAndCoverage = (
     }
 
     // --- ПРИМЕНЯЕМ ВЛИЯНИЕ ТЕМПЕРАТУРЫ ---
-    // Здесь мы замыкаем круг: Температура -> Ar -> buoyancyFactor -> Скорость
     vx = vx * buoyancyFactor;
 
-    // Физические ограничения (скорость не может быть отрицательной)
-    // Разрешаем скорости расти выше v0 в случае сильного "падения" холодного воздуха
+    // Физические ограничения
     vx = Math.max(0.05, vx); 
 
     // Расчет радиуса (линейное расширение)
@@ -137,51 +135,25 @@ export const useScientificSimulation = (
         // --- ФИЗИЧЕСКИЙ ДВИЖОК ---
         
         const g = 9.81;
-        // Перевод температур в Кельвины для расчета плотности
         const T_ref = 273.15 + roomTemp; 
-        const beta = 1 / T_ref; // Коэффициент объемного расширения
-        const dt = temp - roomTemp; // Разница температур (Приток - Комната)
-        const l0 = Math.sqrt(spec.f0); // Характерный размер
+        const beta = 1 / T_ref; 
+        const dt = temp - roomTemp; 
+        const l0 = Math.sqrt(spec.f0); 
 
-        // 1. Число Архимеда (Ar)
-        // Характеризует борьбу инерции (v0) и плавучести (dt)
-        const Ar = v0 > 0.1 
-            ? (g * beta * dt * l0) / (v0 * v0) 
-            : 0;
+        const Ar = v0 > 0.1 ? (g * beta * dt * l0) / (v0 * v0) : 0;
 
-        // 2. Коэффициент влияния Архимеда (k_archimedes)
-        // Этот коэффициент показывает, как меняется импульс струи из-за температуры
         let k_archimedes = 1.0;
-        
-        // --- УСИЛЕНИЕ ЭФФЕКТА (GAIN) ---
-        // Реальный Ar очень мал (~0.001). Чтобы пользователь увидел эффект в UI,
-        // мы применяем коэффициент усиления.
-        // VISUAL_GAIN = 15.0 (вместо теоретического 1.5)
         const VISUAL_GAIN = 15.0; 
 
         if (Math.abs(Ar) > 0.00001) {
-            // Ar > 0 (нагрев): сила Архимеда направлена вверх, против движения струи -> торможение
-            // Ar < 0 (охлаждение): сила Архимеда направлена вниз, по движению -> ускорение
             k_archimedes = 1.0 - (VISUAL_GAIN * Ar); 
-            
-            // Ограничители реальности
             k_archimedes = Math.max(0.1, Math.min(3.0, k_archimedes));
         }
 
-        // 3. Применяем коэффициент ко всем параметрам
-        
-        // Дальнобойность меняется
         const finalThrow = Math.max(0, throwDist * k_archimedes);
-
-        // Скорость в рабочей зоне меняется!
         const Ak_mm2 = spec.f0 * 1000000; 
         const { workzoneVelocity, coverageRadius } = calculateWorkzoneVelocityAndCoverage(
-            v0, 
-            Ak_mm2, 
-            diffuserHeight, 
-            workZoneHeight,
-            2.0,          // m (форма струи)
-            k_archimedes  // <--- ВОТ ОНО: Передаем влияние температуры в расчет скорости
+            v0, Ak_mm2, diffuserHeight, workZoneHeight, 2.0, k_archimedes 
         );
 
         return {
@@ -192,19 +164,81 @@ export const useScientificSimulation = (
             workzoneVelocity: Math.max(0, workzoneVelocity),
             coverageRadius: Math.max(0, coverageRadius),
             spec,
-            Ar, // Нужно для визуализации частиц в Canvas
+            Ar, 
             error: null
         };
     }, [modelId, flowType, diameter, volume, temp, roomTemp, diffuserHeight, workZoneHeight]);
 };
 
-// --- Вспомогательные функции (Top View logic preserved) ---
+// --- PROBE PHYSICS ---
+export const calculateProbeData = (
+    x: number, 
+    y: number, 
+    diffusers: PlacedDiffuser[], 
+    roomTemp: number, 
+    supplyTemp: number
+): ProbeData => {
+    let maxV = 0;
+    let dominantDiffuser: PlacedDiffuser | null = null;
+
+    // 1. Calculate Velocity & Direction
+    diffusers.forEach(d => {
+        const dist = Math.sqrt(Math.pow(d.x - x, 2) + Math.pow(d.y - y, 2));
+        const radius = d.performance.coverageRadius;
+        
+        if (dist <= radius) {
+            // Simplified Schlichting profile
+            const vCore = d.performance.workzoneVelocity;
+            const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
+            
+            if (vPoint > maxV) {
+                maxV = vPoint;
+                dominantDiffuser = d;
+            }
+        }
+    });
+
+    const angle = dominantDiffuser 
+        ? Math.atan2(y - dominantDiffuser.y, x - dominantDiffuser.x)
+        : 0;
+
+    // 2. Calculate Temperature (Mixing Model)
+    // Simple mixing: if v is high, t -> supplyTemp. If v is low, t -> roomTemp.
+    // Max practical velocity in work zone is usually around 0.5-1.0 m/s
+    const mixingFactor = Math.min(1, maxV / 0.8); 
+    const t = roomTemp + (supplyTemp - roomTemp) * mixingFactor;
+
+    // 3. Calculate Draft Rating (ISO 7730)
+    // DR = (34 - t) * (v - 0.05)^0.62 * (0.37 * v * Tu + 3.14)
+    // Assume Turbulence Intensity (Tu) = 40% (0.4) for air jets
+    let dr = 0;
+    const vCalc = Math.max(0.05, maxV); // Threshold for formula validity
+    const tu = 0.4; 
+    
+    if (vCalc > 0.05) {
+        const term1 = (34 - t);
+        const term2 = Math.pow(vCalc - 0.05, 0.62);
+        const term3 = (0.37 * vCalc * tu * 100) + 3.14; // Tu in percent for formula (usually) or decimal? 
+        // Standard ISO 7730: Tu is percentage (e.g., 40). 
+        // 0.37 * v * Tu + 3.14
+        
+        dr = term1 * term2 * (0.37 * vCalc * 40 + 3.14);
+    }
+    
+    return {
+        v: maxV,
+        t: t,
+        angle: angle,
+        dr: Math.min(100, Math.max(0, dr))
+    };
+};
+
+// --- VISUALIZATION HELPERS ---
 
 export const calculateVelocityField = (
     roomWidth: number, roomLength: number, placedDiffusers: any[], 
     diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5
 ): number[][] => {
-    // Рассчитываем сетку скоростей для Heatmap
     const cols = Math.ceil(roomWidth / gridStep);
     const rows = Math.ceil(roomLength / gridStep);
     const field: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
@@ -215,21 +249,15 @@ export const calculateVelocityField = (
             const y = r * gridStep + gridStep / 2;
             
             let maxV = 0;
-            
-            // Находим максимальную скорость от всех диффузоров в этой точке (суперпозицию упрощаем до max)
             placedDiffusers.forEach(d => {
                 const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
                 const radius = d.performance.coverageRadius;
-                
                 if (dist <= radius) {
-                    // Упрощенный профиль скорости: макс в центре, падает к краям
                     const vCore = d.performance.workzoneVelocity;
-                    // Профиль Шлихтинга (упрощенно):
                     const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
                     if (vPoint > maxV) maxV = vPoint;
                 }
             });
-            
             field[r][c] = maxV;
         }
     }

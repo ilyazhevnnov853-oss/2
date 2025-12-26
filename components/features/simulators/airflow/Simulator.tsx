@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp, Target
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
@@ -10,7 +10,7 @@ import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import SimulatorHelpOverlay from './SimulatorHelpOverlay';
-import { PlacedDiffuser, PerformanceResult } from '../../../../types';
+import { PlacedDiffuser, PerformanceResult, Probe } from '../../../../types';
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
@@ -26,7 +26,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [isHelpMode, setIsHelpMode] = useState(false);
     const [wasPlayingBeforeHelp, setWasPlayingBeforeHelp] = useState(false);
 
-    // CHANGED: Default view is now 'top'
+    // Default view is now 'top'
     const [viewMode, setViewMode] = useState<'side' | 'top' | '3d'>('top');
     
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -36,12 +36,16 @@ const Simulator = ({ onBack, onHome }: any) => {
     // Placement Mode
     const [placementMode, setPlacementMode] = useState<'single' | 'multi'>('single');
 
-    // Simulation Data - Start EMPTY
+    // Simulation Data
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
     const [velocityField, setVelocityField] = useState<number[][]>([]);
     const [coverageAnalysis, setCoverageAnalysis] = useState({ totalCoverage: 0, avgVelocity: 0, comfortZones: 0, warningZones: 0, draftZones: 0, deadZones: 0 });
     
+    // --- PROBE STATE ---
+    const [probes, setProbes] = useState<Probe[]>([]);
+    const [isProbeMode, setIsProbeMode] = useState(false);
+
     // UI Interaction State
     const [isDragging, setIsDragging] = useState(false);
 
@@ -74,7 +78,7 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, []);
     
     useEffect(() => {
-        // CHANGED: Do not calculate velocity field if power is OFF. This ensures "no flow" until start.
+        // Do not calculate velocity field if power is OFF. This ensures "no flow" until start.
         if (viewMode !== 'top' || placedDiffusers.length === 0 || !isPowerOn) { 
             setVelocityField([]); 
             return; 
@@ -102,7 +106,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         const original = placedDiffusers.find(d => d.id === id);
         if (!original) return;
         
-        // Smart duplicate placement
+        // Smart duplicate placement logic
         const tryOffsets = [
             {dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1},
             {dx: 1, dy: 1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: -1, dy: -1}
@@ -128,7 +132,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         }
         
         if (!found) {
-             // Fallback minimal shift if crowded, user will drag it
              newX = Math.min(params.roomWidth - 0.5, Math.max(0.5, original.x + 0.2));
              newY = Math.min(params.roomLength - 0.5, Math.max(0.5, original.y + 0.2));
         }
@@ -159,23 +162,18 @@ const Simulator = ({ onBack, onHome }: any) => {
     // --- LOGIC ---
     const toggleSection = (id: string) => setOpenSection(prev => prev === id ? null : id);
     
-    // CHANGED: togglePower now handles switching views if needed, or simply enabling flow
     const togglePower = () => { 
         const newState = !isPowerOn;
         setIsPowerOn(newState); 
         setIsPlaying(true); 
-        // Note: We stay in Top view initially when starting, allowing user to switch manually now that it's unlocked
     };
 
-    // Toggle Help Mode
     const toggleHelp = () => {
         if (!isHelpMode) {
-            // Turning ON Help
             setWasPlayingBeforeHelp(isPlaying);
             setIsPlaying(false);
             setIsHelpMode(true);
         } else {
-            // Turning OFF Help
             setIsHelpMode(false);
             if (wasPlayingBeforeHelp && isPowerOn) {
                 setIsPlaying(true);
@@ -216,13 +214,27 @@ const Simulator = ({ onBack, onHome }: any) => {
         if (mode === 'single' && placedDiffusers.length > 1) {
             if (confirm("Переход в режим 'Одиночный' удалит лишние устройства. Продолжить?")) {
                 setPlacedDiffusers([placedDiffusers[0]]);
-                setSelectedDiffuserId(placedDiffusers[0].id); // Update selection to the only remaining diffuser
+                setSelectedDiffuserId(placedDiffusers[0].id); 
                 setPlacementMode('single');
             }
         } else {
             setPlacementMode(mode);
         }
     };
+
+    // --- PROBE HANDLERS ---
+    const addProbe = (x: number, y: number) => {
+        const newProbe: Probe = { id: `p-${Date.now()}`, x, y };
+        setProbes(prev => [...prev, newProbe]);
+    };
+
+    const removeProbe = (id: string) => {
+        setProbes(prev => prev.filter(p => p.id !== id));
+    };
+
+    const updateProbePos = useCallback((id: string, x: number, y: number) => {
+        setProbes(prev => prev.map(p => p.id === id ? { ...p, x, y } : p));
+    }, []);
 
     // --- PLACEMENT HELPERS ---
     const isColliding = (x: number, y: number, diffusers: PlacedDiffuser[], minDist: number) => {
@@ -271,7 +283,6 @@ const Simulator = ({ onBack, onHome }: any) => {
     const addDiffuserToPlan = () => {
         if (!sizeSelected || physics.error) return;
 
-        // Restriction: Single Mode
         if (placementMode === 'single' && placedDiffusers.length > 0) {
             if(confirm("В режиме 'Одиночный' можно установить только один диффузор. Заменить текущий?")) {
                  // Will be replaced below
@@ -284,7 +295,6 @@ const Simulator = ({ onBack, onHome }: any) => {
         let newX = params.roomWidth / 2;
         let newY = params.roomLength / 2;
 
-        // Collision Logic: Multi Mode
         if (placementMode === 'multi' && placedDiffusers.length > 0) {
             const minSpacing = 1.0;
             const pos = findFreePosition(placedDiffusers, params.roomWidth, params.roomLength, minSpacing);
@@ -324,13 +334,11 @@ const Simulator = ({ onBack, onHome }: any) => {
         if (canvas) { const link = document.createElement('a'); link.download = `Aeroflow-${Date.now()}.png`; link.href = canvas.toDataURL(); link.click(); }
     };
 
-    // Logic for locking views
     const areSimulationViewsLocked = !isPowerOn || placedDiffusers.length === 0;
 
     return (
         <div className="flex w-full h-[100dvh] bg-[#F5F5F7] dark:bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-500">
              
-             {/* HELP OVERLAY */}
              {isHelpMode && <SimulatorHelpOverlay onClose={toggleHelp} viewMode={viewMode} isPowerOn={isPowerOn} />}
 
              {/* AMBIENT BACKGROUND */}
@@ -379,6 +387,12 @@ const Simulator = ({ onBack, onHome }: any) => {
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
+                        // Probe props
+                        probes={probes}
+                        isProbeMode={isProbeMode}
+                        onAddProbe={addProbe}
+                        onRemoveProbe={removeProbe}
+                        onUpdateProbePos={updateProbePos}
                     />
                 </div>
                 
@@ -466,13 +480,20 @@ const Simulator = ({ onBack, onHome }: any) => {
                                     <>
                                         <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
                                         <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
+                                        {/* PROBE MODE TOGGLE */}
+                                        <button 
+                                            onClick={() => setIsProbeMode(!isProbeMode)} 
+                                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${isProbeMode ? 'bg-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
+                                            title="Точка измерения"
+                                        >
+                                            <Target size={18} />
+                                        </button>
                                     </>
                                 )}
                                  <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт"><Download size={18} /></button>
                             </>
                         ) : null}
 
-                        {/* HELP BUTTON (NEW) */}
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
                         <button 
                             onClick={toggleHelp} 
@@ -496,6 +517,9 @@ const Simulator = ({ onBack, onHome }: any) => {
                 isMobileStatsOpen={isMobileStatsOpen}
                 setIsMobileStatsOpen={setIsMobileStatsOpen}
                 isHelpMode={isHelpMode}
+                // Probes
+                probes={probes}
+                onRemoveProbe={removeProbe}
             />
         </div>
     );
