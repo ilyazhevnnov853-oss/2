@@ -1,7 +1,7 @@
 
 import { useMemo } from 'react';
 import { SPECS, ENGINEERING_DATA } from '../constants';
-import { PerformanceResult, Spec, PlacedDiffuser, ProbeData } from '../types';
+import { PerformanceResult, Spec, PlacedDiffuser, ProbeData, Obstacle } from '../types';
 
 // ==========================================
 // 4. PHYSICS & SIMULATION LOGIC
@@ -10,6 +10,34 @@ import { PerformanceResult, Spec, PlacedDiffuser, ProbeData } from '../types';
 export const interpolate = (val: number, x0: number, x1: number, y0: number, y1: number): number => {
     if (x1 === x0) return y0;
     return y0 + ((val - x0) * (y1 - y0)) / (x1 - x0);
+};
+
+// --- GEOMETRY HELPERS ---
+const lineIntersectsRect = (p1: {x: number, y: number}, p2: {x: number, y: number}, rect: {x: number, y: number, w: number, h: number}) => {
+    // Check if point is inside rect first
+    const isInside = (p: {x: number, y: number}, r: any) => 
+        p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+    // We only care if the TARGET point is blocked or if the line crosses. 
+    // Actually, if the target is inside an obstacle (like a column), velocity is 0.
+    if (isInside(p2, rect)) return true;
+
+    // Line intersection test (Liang-Barsky or simpler axis separation for AABB)
+    // Simplified: Check intersection with 4 segments of rect
+    const segments = [
+        [{x: rect.x, y: rect.y}, {x: rect.x + rect.w, y: rect.y}], // Top
+        [{x: rect.x + rect.w, y: rect.y}, {x: rect.x + rect.w, y: rect.y + rect.h}], // Right
+        [{x: rect.x + rect.w, y: rect.y + rect.h}, {x: rect.x, y: rect.y + rect.h}], // Bottom
+        [{x: rect.x, y: rect.y + rect.h}, {x: rect.x, y: rect.y}] // Left
+    ];
+
+    const ccw = (A: any, B: any, C: any) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+    const intersect = (A: any, B: any, C: any, D: any) => ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
+
+    for (const seg of segments) {
+        if (intersect(p1, p2, seg[0], seg[1])) return true;
+    }
+    return false;
 };
 
 // --- ГЛАВНАЯ ФУНКЦИЯ РАСЧЕТА СКОРОСТИ ---
@@ -176,13 +204,29 @@ export const calculateProbeData = (
     y: number, 
     diffusers: PlacedDiffuser[], 
     roomTemp: number, 
-    supplyTemp: number
+    supplyTemp: number,
+    obstacles: Obstacle[] = []
 ): ProbeData => {
     let maxV = 0;
     let dominantDiffuser: PlacedDiffuser | null = null;
 
     // 1. Calculate Velocity & Direction
     diffusers.forEach(d => {
+        // Line of Sight Check
+        let isBlocked = false;
+        for (const obs of obstacles) {
+            if (lineIntersectsRect(
+                {x: d.x, y: d.y}, 
+                {x, y}, 
+                {x: obs.x - obs.width/2, y: obs.y - obs.height/2, w: obs.width, h: obs.height}
+            )) {
+                isBlocked = true;
+                break;
+            }
+        }
+
+        if (isBlocked) return; // Velocity from this diffuser is 0
+
         const dist = Math.sqrt(Math.pow(d.x - x, 2) + Math.pow(d.y - y, 2));
         const radius = d.performance.coverageRadius;
         
@@ -237,7 +281,8 @@ export const calculateProbeData = (
 
 export const calculateVelocityField = (
     roomWidth: number, roomLength: number, placedDiffusers: any[], 
-    diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5
+    diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5,
+    obstacles: Obstacle[] = []
 ): number[][] => {
     const cols = Math.ceil(roomWidth / gridStep);
     const rows = Math.ceil(roomLength / gridStep);
@@ -250,12 +295,35 @@ export const calculateVelocityField = (
             
             let maxV = 0;
             placedDiffusers.forEach(d => {
-                const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
-                const radius = d.performance.coverageRadius;
-                if (dist <= radius) {
-                    const vCore = d.performance.workzoneVelocity;
-                    const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
-                    if (vPoint > maxV) maxV = vPoint;
+                // Obstacle Check
+                let isBlocked = false;
+                for (const obs of obstacles) {
+                    // Quick AABB check for point inside obstacle
+                    if (x >= obs.x - obs.width/2 && x <= obs.x + obs.width/2 && 
+                        y >= obs.y - obs.height/2 && y <= obs.y + obs.height/2) {
+                        isBlocked = true; 
+                        break;
+                    }
+                    
+                    // Line of Sight
+                    if (lineIntersectsRect(
+                        {x: d.x, y: d.y}, 
+                        {x, y}, 
+                        {x: obs.x - obs.width/2, y: obs.y - obs.height/2, w: obs.width, h: obs.height}
+                    )) {
+                        isBlocked = true;
+                        break;
+                    }
+                }
+
+                if (!isBlocked) {
+                    const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
+                    const radius = d.performance.coverageRadius;
+                    if (dist <= radius) {
+                        const vCore = d.performance.workzoneVelocity;
+                        const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
+                        if (vPoint > maxV) maxV = vPoint;
+                    }
                 }
             });
             field[r][c] = maxV;

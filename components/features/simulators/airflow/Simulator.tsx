@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp, Target
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp, Target,
+  MousePointer2, Ruler, BrickWall, Pipette
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
@@ -10,7 +11,7 @@ import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import SimulatorHelpOverlay from './SimulatorHelpOverlay';
-import { PlacedDiffuser, PerformanceResult, Probe } from '../../../../types';
+import { PlacedDiffuser, PerformanceResult, Probe, ToolMode, Obstacle } from '../../../../types';
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
@@ -33,8 +34,11 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
     const [openSection, setOpenSection] = useState<string | null>('distributor');
     
-    // Placement Mode
+    // Placement Mode (For Add Button behavior)
     const [placementMode, setPlacementMode] = useState<'single' | 'multi'>('single');
+
+    // Tool Mode (For Interaction)
+    const [activeTool, setActiveTool] = useState<ToolMode>('select');
 
     // Simulation Data
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
@@ -44,7 +48,9 @@ const Simulator = ({ onBack, onHome }: any) => {
     
     // --- PROBE STATE ---
     const [probes, setProbes] = useState<Probe[]>([]);
-    const [isProbeMode, setIsProbeMode] = useState(false);
+
+    // --- OBSTACLE STATE ---
+    const [obstacles, setObstacles] = useState<Obstacle[]>([]);
 
     // UI Interaction State
     const [isDragging, setIsDragging] = useState(false);
@@ -86,8 +92,8 @@ const Simulator = ({ onBack, onHome }: any) => {
         
         const step = isDragging ? 0.5 : 0.1;
         
-        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step));
-    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging, isPowerOn]);
+        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step, obstacles));
+    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging, isPowerOn, obstacles]);
     
     useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
     
@@ -224,7 +230,8 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     // --- PROBE HANDLERS ---
     const addProbe = (x: number, y: number) => {
-        const newProbe: Probe = { id: `p-${Date.now()}`, x, y };
+        // Initialize z at workZoneHeight
+        const newProbe: Probe = { id: `p-${Date.now()}`, x, y, z: params.workZoneHeight };
         setProbes(prev => [...prev, newProbe]);
     };
 
@@ -232,8 +239,22 @@ const Simulator = ({ onBack, onHome }: any) => {
         setProbes(prev => prev.filter(p => p.id !== id));
     };
 
-    const updateProbePos = useCallback((id: string, x: number, y: number) => {
-        setProbes(prev => prev.map(p => p.id === id ? { ...p, x, y } : p));
+    const updateProbePos = useCallback((id: string, pos: {x?: number, y?: number, z?: number}) => {
+        setProbes(prev => prev.map(p => p.id === id ? { ...p, ...pos } : p));
+    }, []);
+
+    // --- OBSTACLE HANDLERS ---
+    const addObstacle = (x: number, y: number, w: number = 1.0, h: number = 1.0, type: 'furniture' | 'wall_block' = 'furniture') => {
+        const newObs: Obstacle = { id: `o-${Date.now()}`, x, y, width: w, height: h, type };
+        setObstacles(prev => [...prev, newObs]);
+    };
+
+    const removeObstacle = (id: string) => {
+        setObstacles(prev => prev.filter(o => o.id !== id));
+    };
+
+    const updateObstacle = useCallback((id: string, updates: Partial<Obstacle>) => {
+        setObstacles(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o));
     }, []);
 
     // --- PLACEMENT HELPERS ---
@@ -336,6 +357,22 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     const areSimulationViewsLocked = !isPowerOn || placedDiffusers.length === 0;
 
+    const ToolButton = ({ active, icon, onClick, title }: any) => (
+        <button 
+            onClick={onClick}
+            title={title}
+            className={`
+                w-9 h-9 flex items-center justify-center rounded-full transition-all
+                ${active 
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }
+            `}
+        >
+            {icon}
+        </button>
+    );
+
     return (
         <div className="flex w-full h-[100dvh] bg-[#F5F5F7] dark:bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-500">
              
@@ -358,6 +395,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={addDiffuserToPlan}
                 isHelpMode={isHelpMode}
+                // Obstacles
+                setObstacles={setObstacles}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
@@ -387,17 +426,24 @@ const Simulator = ({ onBack, onHome }: any) => {
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
+                        // Tool State
+                        activeTool={activeTool}
+                        setActiveTool={setActiveTool}
                         // Probe props
                         probes={probes}
-                        isProbeMode={isProbeMode}
                         onAddProbe={addProbe}
                         onRemoveProbe={removeProbe}
                         onUpdateProbePos={updateProbePos}
+                        // Obstacle Props
+                        obstacles={obstacles}
+                        onAddObstacle={addObstacle}
+                        onRemoveObstacle={removeObstacle}
+                        onUpdateObstacle={updateObstacle}
                     />
                 </div>
                 
                  {/* FLOATING "ISLAND" BAR (Controls) */}
-                <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none transition-all duration-300 ${isHelpMode ? 'z-[210]' : 'z-40'}`}>
+                <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 w-[95%] max-w-2xl pointer-events-none transition-all duration-300 ${isHelpMode ? 'z-[210]' : 'z-40'}`}>
                     <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-white/80 dark:bg-[#0f1014]/90 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
                         
                         <button 
@@ -430,7 +476,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                             `}
                         >
                             {areSimulationViewsLocked ? <Lock size={14}/> : <Layers size={16}/>}
-                            <span>Срез</span>
+                            <span className="hidden sm:inline">Срез</span>
                         </button>
                         
                         <button 
@@ -449,29 +495,19 @@ const Simulator = ({ onBack, onHome }: any) => {
                             `}
                         >
                             {areSimulationViewsLocked ? <Lock size={14}/> : <Box size={16}/>}
-                            <span>3D</span>
+                            <span className="hidden sm:inline">3D</span>
                         </button>
                         
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
                         
-                        {viewMode === 'top' && (
-                            <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5 mr-1">
-                                <button 
-                                    onClick={() => handleModeSwitch('single')} 
-                                    className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${placementMode === 'single' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                    title="Режим: Одиночный"
-                                >
-                                    <Square size={16} />
-                                </button>
-                                <button 
-                                    onClick={() => handleModeSwitch('multi')} 
-                                    className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${placementMode === 'multi' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                                    title="Режим: Мульти"
-                                >
-                                    <LayoutGrid size={16} />
-                                </button>
-                            </div>
-                        )}
+                        {/* --- TOOLBAR --- */}
+                        <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5 mr-1">
+                            <ToolButton active={activeTool === 'select'} onClick={() => setActiveTool('select')} icon={<MousePointer2 size={16} />} title="Выбор и перемещение" />
+                            <ToolButton active={activeTool === 'probe'} onClick={() => setActiveTool('probe')} icon={<Target size={16} />} title="Точка измерения" />
+                            <ToolButton active={activeTool === 'measure'} onClick={() => setActiveTool('measure')} icon={<Ruler size={16} />} title="Линейка" />
+                            <ToolButton active={activeTool === 'obstacle'} onClick={() => setActiveTool('obstacle')} icon={<BrickWall size={16} />} title="Препятствие" />
+                            <ToolButton active={activeTool === 'pipette'} onClick={() => setActiveTool('pipette')} icon={<Pipette size={16} />} title="Копировать свойства" />
+                        </div>
 
                         {isPowerOn ? (
                             <>
@@ -480,14 +516,6 @@ const Simulator = ({ onBack, onHome }: any) => {
                                     <>
                                         <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
                                         <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
-                                        {/* PROBE MODE TOGGLE */}
-                                        <button 
-                                            onClick={() => setIsProbeMode(!isProbeMode)} 
-                                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${isProbeMode ? 'bg-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
-                                            title="Точка измерения"
-                                        >
-                                            <Target size={18} />
-                                        </button>
                                     </>
                                 )}
                                  <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт"><Download size={18} /></button>
@@ -520,6 +548,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 // Probes
                 probes={probes}
                 onRemoveProbe={removeProbe}
+                // Obstacles could be passed here if needed in Right Panel (e.g. list view)
             />
         </div>
     );

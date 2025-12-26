@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { PerformanceResult, PlacedDiffuser, Probe } from '../../../../types';
+import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle } from '../../../../types';
 import SideViewCanvas from './views/SideViewCanvas';
 import TopViewCanvas from './views/TopViewCanvas';
 import ThreeDViewCanvas from './views/ThreeDViewCanvas';
@@ -37,12 +37,19 @@ interface DiffuserCanvasProps {
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
+  // Tool Props
+  activeTool?: ToolMode;
+  setActiveTool?: (mode: ToolMode) => void;
   // Probe Props
   probes?: Probe[];
-  isProbeMode?: boolean;
   onAddProbe?: (x: number, y: number) => void;
   onRemoveProbe?: (id: string) => void;
-  onUpdateProbePos?: (id: string, x: number, y: number) => void;
+  onUpdateProbePos?: (id: string, pos: {x?: number, y?: number, z?: number}) => void;
+  // Obstacle Props
+  obstacles?: Obstacle[];
+  onAddObstacle?: (x: number, y: number, w?: number, h?: number, type?: 'furniture' | 'wall_block') => void;
+  onRemoveObstacle?: (id: string) => void;
+  onUpdateObstacle?: (id: string, updates: Partial<Obstacle>) => void;
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -90,12 +97,19 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 onDuplicateDiffuser={props.onDuplicateDiffuser}
                 onDragStart={props.onDragStart}
                 onDragEnd={props.onDragEnd}
+                // Tool Props
+                activeTool={props.activeTool}
+                setActiveTool={props.setActiveTool}
                 // Pass Probe props
                 probes={props.probes}
-                isProbeMode={props.isProbeMode}
                 onAddProbe={props.onAddProbe}
                 onRemoveProbe={props.onRemoveProbe}
                 onUpdateProbePos={props.onUpdateProbePos}
+                // Pass Obstacle Props
+                obstacles={props.obstacles}
+                onAddObstacle={props.onAddObstacle}
+                onRemoveObstacle={props.onRemoveObstacle}
+                onUpdateObstacle={props.onUpdateObstacle}
                 // Pass Simulation Params for Calculation
                 roomTemp={props.roomTemp}
                 supplyTemp={props.temp}
@@ -119,6 +133,9 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 diffuserHeight={props.diffuserHeight}
                 workZoneHeight={props.workZoneHeight}
                 placedDiffusers={props.placedDiffusers}
+                // Pass 3D Props
+                obstacles={props.obstacles}
+                probes={props.probes}
             />
         );
     } else {
@@ -138,6 +155,13 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 diffuserHeight={props.diffuserHeight}
                 workZoneHeight={props.workZoneHeight}
                 placedDiffusers={props.placedDiffusers}
+                // Pass Side Props
+                activeTool={props.activeTool}
+                obstacles={props.obstacles}
+                probes={props.probes}
+                onUpdateProbePos={props.onUpdateProbePos}
+                onDragStart={props.onDragStart}
+                onDragEnd={props.onDragEnd}
             />
         );
     }

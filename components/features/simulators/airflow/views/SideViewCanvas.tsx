@@ -1,5 +1,6 @@
-import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+
+import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle } from '../../../../../types';
 import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 const CONSTANTS = {
@@ -45,7 +46,14 @@ interface SideViewCanvasProps {
   roomHeight: number; 
   diffuserHeight: number; 
   workZoneHeight: number;
-  placedDiffusers?: PlacedDiffuser[]; // Add this
+  placedDiffusers?: PlacedDiffuser[];
+  // Added Props
+  activeTool?: ToolMode;
+  obstacles?: Obstacle[];
+  probes?: Probe[];
+  onUpdateProbePos?: (id: string, pos: {x?: number, y?: number, z?: number}) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }
 
 // --- HELPERS ---
@@ -65,6 +73,11 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     const requestRef = useRef<number>(0);
     const simulationRef = useRef(props);
     const particlePool = useRef<Particle[]>([]);
+
+    // Interaction State
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragOffset, setDragOffset] = useState({ x: 0, z: 0 });
+    const dragTargetRef = useRef<{ type: 'probe', id: string } | null>(null);
 
     // Init Pool
     useEffect(() => {
@@ -106,7 +119,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 modelId: d.modelId
             };
         } else {
-            // No diffusers placed -> No spawn
             return;
         }
 
@@ -117,7 +129,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         const spec = physics.spec;
         if (!spec || !spec.A) return;
 
-        // Try to get flowType from catalog, fallback to state
         const catalogItem = DIFFUSER_CATALOG.find(c => c.id === modelId);
         const flowType = catalogItem ? catalogItem.modes[0].flowType : state.flowType;
 
@@ -215,7 +226,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
     const drawDiffuserSideProfile = (
         ctx: CanvasRenderingContext2D, 
-        cx: number, // Projected Screen X
+        cx: number, 
         ppm: number, 
         state: SideViewCanvasProps,
         overridePerf?: PerformanceResult,
@@ -269,6 +280,65 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         }
     }
 
+    const drawObstacles = (ctx: CanvasRenderingContext2D, ppm: number, state: SideViewCanvasProps) => {
+        if (!state.obstacles) return;
+        
+        state.obstacles.forEach(obs => {
+            const h = obs.type === 'wall_block' ? state.roomHeight : 1.0;
+            const w = obs.width * ppm;
+            const screenH = h * ppm;
+            const screenX = (obs.x - obs.width/2) * ppm;
+            const screenY = (state.roomHeight - h) * ppm; // Floor is at bottom
+
+            // For furniture we assume it sits on floor.
+            // Screen Y = 0 is top. Floor Y = roomHeight * ppm.
+            // Furniture top Y = (roomHeight - h) * ppm.
+            
+            ctx.save();
+            ctx.fillStyle = obs.type === 'wall_block' ? '#0f172a' : '#475569';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            
+            // Draw rectangle
+            ctx.fillRect(screenX, screenY, w, screenH);
+            ctx.strokeRect(screenX, screenY, w, screenH);
+            
+            // Hatched pattern
+            ctx.beginPath();
+            ctx.rect(screenX, screenY, w, screenH);
+            ctx.clip();
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            for (let i = -w; i < w + screenH; i += 10) {
+                ctx.moveTo(screenX + i, screenY);
+                ctx.lineTo(screenX + i - screenH, screenY + screenH);
+            }
+            ctx.stroke();
+            ctx.restore();
+        });
+    }
+
+    const drawProbes = (ctx: CanvasRenderingContext2D, ppm: number, state: SideViewCanvasProps) => {
+        if (!state.probes) return;
+
+        state.probes.forEach(p => {
+            const px = p.x * ppm;
+            const py = (state.roomHeight - p.z) * ppm; // Vertical height Z
+            
+            ctx.beginPath();
+            ctx.arc(px, py, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#34d399'; // Green probe color
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Height label
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px Inter';
+            ctx.fillText(`${p.z.toFixed(2)}m`, px + 10, py);
+        });
+    }
+
     const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: SideViewCanvasProps) => {
         if (!state.showGrid) return;
         
@@ -310,28 +380,27 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         const dt = CONSTANTS.BASE_TIME_STEP;
         const { ppm } = getSideLayout(width, height, roomHeight);
 
-        // If simulation is OFF, simply clear the canvas
         if (!isPowerOn) {
                 ctx.clearRect(0, 0, width, height);
-                // Fill bg for better clear
                 ctx.fillStyle = '#030304';
                 ctx.fillRect(0, 0, width, height);
                 drawSideViewGrid(ctx, width, height, ppm, state);
+                drawObstacles(ctx, ppm, state);
                 drawAllDiffusers(ctx, ppm, state);
+                drawProbes(ctx, ppm, state);
                 requestRef.current = requestAnimationFrame(animate);
                 return;
         }
 
-        // Trail effect
         ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
         ctx.fillRect(0, 0, width, height);
         
         drawSideViewGrid(ctx, width, height, ppm, state);
+        drawObstacles(ctx, ppm, state);
 
         const pool = particlePool.current;
         
-        // 1. UPDATE AND SPAWN
-        // Calculate Max V0 for spawn rate across all diffusers
+        // 1. SPAWN
         const maxV0 = (state.placedDiffusers && state.placedDiffusers.length > 0)
             ? Math.max(...state.placedDiffusers.map(d => d.performance.v0 || 0))
             : (state.physics.v0 || 0);
@@ -351,7 +420,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             }
         }
 
-        // 2. UPDATE PHYSICS & BATCHING
+        // 2. PHYSICS
         const maxH = height;
         const batches: Record<string, Particle[]> = {};
         const QUANTIZE = 10;
@@ -368,8 +437,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 }
 
                 if (p.isSuction) {
-                    // Pull towards spawn origin in suction mode (simplified visualization)
-                    // (Assuming linear pull back to spawn point in physics calculation previously set)
                     p.x += p.vx * dt; 
                     p.y += p.vy * dt;
                     const diffY = (state.roomHeight - state.diffuserHeight) * ppm;
@@ -393,7 +460,6 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 }
             }
 
-            // Add to Batch
             if (p.history.length > 1) {
                 const rawAlpha = (1 - p.age/p.life) * 0.5;
                 const alpha = Math.ceil(rawAlpha * QUANTIZE) / QUANTIZE;
@@ -405,7 +471,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             }
         }
 
-        // 3. DRAW BATCHES
+        // 3. DRAW PARTICLES
         ctx.globalCompositeOperation = 'screen';
         ctx.lineWidth = 1; 
         ctx.lineCap = 'round';
@@ -437,6 +503,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
         ctx.globalCompositeOperation = 'source-over';
         drawAllDiffusers(ctx, ppm, state);
+        drawProbes(ctx, ppm, state);
 
         requestRef.current = requestAnimationFrame(animate);
     }, []);
@@ -448,13 +515,90 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         };
     }, [animate]);
 
+    // Interaction Handlers for Dragging Probes Vertically
+    const getMousePos = (e: React.MouseEvent | React.TouchEvent) => {
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 0, y: 0 };
+        let clientX, clientY;
+        if ('touches' in e) {
+             clientX = e.touches[0].clientX;
+             clientY = e.touches[0].clientY;
+        } else {
+             clientX = (e as React.MouseEvent).clientX;
+             clientY = (e as React.MouseEvent).clientY;
+        }
+        const scaleX = props.width / rect.width;
+        const scaleY = props.height / rect.height;
+        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    };
+
+    const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+        // Only allow dragging if activeTool is Select or Probe
+        if (props.activeTool !== 'select' && props.activeTool !== 'probe') return;
+
+        const { x: mouseX, y: mouseY } = getMousePos(e);
+        const { ppm } = getSideLayout(props.width, props.height, props.roomHeight);
+
+        // Check Probes
+        const probes = props.probes || [];
+        for (let i = probes.length - 1; i >= 0; i--) {
+            const p = probes[i];
+            const px = p.x * ppm;
+            const py = (props.roomHeight - p.z) * ppm;
+            
+            if (Math.hypot(mouseX - px, mouseY - py) < 15) {
+                setIsDragging(true);
+                dragTargetRef.current = { type: 'probe', id: p.id };
+                setDragOffset({ x: mouseX - px, z: mouseY - py });
+                props.onDragStart && props.onDragStart();
+                return;
+            }
+        }
+    };
+
+    const handleMove = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDragging || !dragTargetRef.current) return;
+        const { x: mouseX, y: mouseY } = getMousePos(e);
+        const { ppm } = getSideLayout(props.width, props.height, props.roomHeight);
+
+        // Map mouse to X and Z
+        let newX = (mouseX - dragOffset.x) / ppm;
+        let newScreenY = (mouseY - dragOffset.z);
+        // Convert screen Y back to Z (height from floor)
+        // screenY = (roomH - z) * ppm => z = roomH - screenY/ppm
+        let newZ = props.roomHeight - (newScreenY / ppm);
+
+        // Clamping
+        newX = Math.max(0, Math.min(props.width / ppm, newX)); // Clamp width roughly
+        newZ = Math.max(0, Math.min(props.roomHeight, newZ));
+
+        if (dragTargetRef.current.type === 'probe' && props.onUpdateProbePos) {
+            props.onUpdateProbePos(dragTargetRef.current.id, { x: newX, z: newZ });
+        }
+    };
+
+    const handleEnd = () => {
+        if (isDragging) {
+            setIsDragging(false);
+            dragTargetRef.current = null;
+            props.onDragEnd && props.onDragEnd();
+        }
+    };
+
     return (
         <div className="relative w-full h-full">
             <canvas 
                 ref={canvasRef} 
                 width={props.width} 
                 height={props.height} 
-                className="block w-full h-full touch-none"
+                className={`block w-full h-full touch-none ${props.activeTool === 'select' || props.activeTool === 'probe' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                onMouseDown={handleStart}
+                onMouseMove={handleMove}
+                onMouseUp={handleEnd}
+                onMouseLeave={handleEnd}
+                onTouchStart={handleStart}
+                onTouchMove={handleMove}
+                onTouchEnd={handleEnd}
                 style={{ touchAction: 'none' }}
             />
             {props.physics.error && (

@@ -1,4 +1,5 @@
-import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+
+import { PerformanceResult, PlacedDiffuser, Obstacle, Probe } from '../../../../../types';
 import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 export const CONSTANTS = {
@@ -38,6 +39,9 @@ export interface ThreeDViewCanvasProps {
   roomLength: number;
   diffuserHeight: number;
   workZoneHeight: number;
+  // Added Props
+  obstacles?: Obstacle[];
+  probes?: Probe[];
 }
 
 export const getGlowColor = (t: number) => {
@@ -113,6 +117,7 @@ export const spawnParticle = (
     if (!spec || !spec.A) return;
     
     // Convert Position to 3D Space centered at (0,0,0)
+    // 3D Coords: x (width), y (height), z (length)
     const centerX = (activeDiffuser.x - roomWidth / 2) * ppm;
     const centerZ = (activeDiffuser.y - roomLength / 2) * ppm;
 
@@ -270,8 +275,44 @@ export const updateParticlePhysics = (
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
     }
     
-    // Bounds check
+    // Bounds check with walls
     if (p.y < 0 || p.y > rh || Math.abs(p.x) > rw/2 || Math.abs(p.z) > rl/2) {
         p.active = false;
+    }
+
+    // Collision Check with Obstacles
+    if (state.obstacles && p.active) {
+        // Coordinates in state.obstacles are relative to Top-Left of Room.
+        // Particle coordinates (p.x, p.z) are centered at (0,0) of room.
+        // Need to convert to same space.
+        
+        // Convert particle to 0-based coords (like Obstacles)
+        // Particle X range: [-rw/2, rw/2] -> [0, rw]
+        const pX_abs = p.x + rw / 2;
+        const pZ_abs = p.z + rl / 2;
+        const pY_abs = p.y; // Height from floor 0 to ceiling rh
+
+        for (const obs of state.obstacles) {
+            // Obstacle Plan coords (meters) -> Pixels
+            const obsX = obs.x * ppm;
+            const obsZ = obs.y * ppm; // "y" in obstacle is Length/Z
+            const obsW = obs.width * ppm;
+            const obsL = obs.height * ppm; // "height" in obstacle type is Length/Z
+            
+            // Obstacle Vertical Height
+            // furniture = 1.0m, wall_block = roomHeight
+            const obsH = (obs.type === 'wall_block' ? state.roomHeight : 1.0) * ppm;
+
+            // Check Collision (AABB)
+            // Obstacle is centered at obsX, obsZ
+            if (
+                pX_abs >= obsX - obsW/2 && pX_abs <= obsX + obsW/2 &&
+                pZ_abs >= obsZ - obsL/2 && pZ_abs <= obsZ + obsL/2 &&
+                pY_abs >= 0 && pY_abs <= obsH
+            ) {
+                p.active = false;
+                break;
+            }
+        }
     }
 };

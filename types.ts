@@ -1,6 +1,17 @@
 
 import { ReactNode } from 'react';
 
+export type ToolMode = 'select' | 'probe' | 'measure' | 'obstacle' | 'pipette';
+
+export interface Obstacle {
+  id: string;
+  x: number; // Center X
+  y: number; // Center Y
+  width: number;
+  height: number;
+  type: 'furniture' | 'wall_block';
+}
+
 export interface Spec {
   f0: number;
   A: number;
@@ -76,6 +87,7 @@ export interface Probe {
   id: string;
   x: number; // Position X (meters)
   y: number; // Position Y (meters)
+  z: number; // Position Z (height in meters)
 }
 
 export interface ProbeData {
