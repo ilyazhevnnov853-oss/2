@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, AlertTriangle, Power, PlusCircle, X, ChevronLeft, CheckCircle2, Shapes } from 'lucide-react';
+import { Fan, ScanLine, Wind, Thermometer, Home, AlertTriangle, Power, PlusCircle, X, ChevronLeft, CheckCircle2, Shapes, Layers } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
 import { GlassButton, GlassSlider } from '../../../ui/Shared';
@@ -17,7 +17,11 @@ export const SimulatorLeftPanel = ({
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
     onAddDiffuser,
     isHelpMode,
-    setObstacles
+    setObstacles,
+    placementMode,
+    setPlacementMode,
+    heatmapZ,
+    setHeatmapZ
 }: any) => {
 
     const handleModelChange = (id: string) => {
@@ -69,7 +73,7 @@ export const SimulatorLeftPanel = ({
             
             setObstacles((prev: Obstacle[]) => [
                 ...prev.filter(o => o.type !== 'wall_block'),
-                { id: `wall-${Date.now()}`, x: cx, y: cy, width: blockW, height: blockL, type: 'wall_block' }
+                { id: `wall-${Date.now()}`, x: cx, y: cy, width: blockW, length: blockL, z: 0, height: params.roomHeight, rotation: 0, type: 'wall_block' }
             ]);
         } else if (preset === 'l-shape-right') {
             // Cut out bottom-right corner
@@ -80,7 +84,7 @@ export const SimulatorLeftPanel = ({
             
             setObstacles((prev: Obstacle[]) => [
                 ...prev.filter(o => o.type !== 'wall_block'),
-                { id: `wall-${Date.now()}`, x: cx, y: cy, width: blockW, height: blockL, type: 'wall_block' }
+                { id: `wall-${Date.now()}`, x: cx, y: cy, width: blockW, length: blockL, z: 0, height: params.roomHeight, rotation: 0, type: 'wall_block' }
             ]);
         }
     };
@@ -227,6 +231,21 @@ export const SimulatorLeftPanel = ({
                                     </div>
                                 </div>
                             </div>
+                            
+                            {/* Heatmap Slice Z */}
+                            {heatmapZ !== undefined && setHeatmapZ && (
+                                <div className="mb-6">
+                                    <GlassSlider 
+                                        label="Срез теплокарты (Z)" 
+                                        icon={<Layers size={14}/>} 
+                                        val={heatmapZ} 
+                                        min={0.1} max={params.roomHeight} step={0.1} 
+                                        onChange={(v: number) => setHeatmapZ(v)} 
+                                        unit=" м"
+                                    />
+                                </div>
+                            )}
+
                             <GlassSlider label="Т° Помещения" icon={<Home size={14}/>} val={params.roomTemp} min={15} max={35} step={1} unit="°C" onChange={(v: number) => setParams(p => ({...p, roomTemp: v}))} color="temp"/>
                         </AccordionItem>
                     </div>
@@ -234,6 +253,24 @@ export const SimulatorLeftPanel = ({
                     {/* Footer Controls */}
                     {viewMode === 'top' && (
                         <div className="p-5 bg-white/60 dark:bg-[#050508]/60 border-t border-black/5 dark:border-white/5 backdrop-blur-xl absolute bottom-0 left-0 right-0 lg:relative">
+                                {/* Placement Mode Toggle */}
+                                {setPlacementMode && (
+                                    <div className="flex bg-black/5 dark:bg-black/20 p-1 rounded-xl border border-black/5 dark:border-white/5 mb-3">
+                                        <button 
+                                            onClick={() => setPlacementMode('single')}
+                                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${placementMode === 'single' ? 'bg-white dark:bg-white/10 text-black dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                        >
+                                            Одиночный
+                                        </button>
+                                        <button 
+                                            onClick={() => setPlacementMode('multi')}
+                                            className={`flex-1 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${placementMode === 'multi' ? 'bg-white dark:bg-white/10 text-black dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                        >
+                                            Мульти
+                                        </button>
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-1 gap-3">
                                     <GlassButton onClick={() => { onAddDiffuser(); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} customClass="w-full bg-white/50 dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-black/5 dark:border-white/5 hover:bg-white dark:hover:bg-white/10" />
                                 </div>

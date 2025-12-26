@@ -1,7 +1,7 @@
 
 import { useMemo } from 'react';
-import { SPECS, ENGINEERING_DATA } from '../constants';
-import { PerformanceResult, Spec, PlacedDiffuser, ProbeData, Obstacle } from '../types';
+import { SPECS, ENGINEERING_DATA, DIFFUSER_CATALOG } from '../constants';
+import { PerformanceResult, Spec, PlacedDiffuser, ProbeData, Obstacle, GridPoint } from '../types';
 
 // ==========================================
 // 4. PHYSICS & SIMULATION LOGIC
@@ -12,75 +12,105 @@ export const interpolate = (val: number, x0: number, x1: number, y0: number, y1:
     return y0 + ((val - x0) * (y1 - y0)) / (x1 - x0);
 };
 
-// --- GEOMETRY HELPERS ---
-const lineIntersectsRect = (p1: {x: number, y: number}, p2: {x: number, y: number}, rect: {x: number, y: number, w: number, h: number}) => {
-    // Check if point is inside rect first
-    const isInside = (p: {x: number, y: number}, r: any) => 
-        p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+// --- GEOMETRY HELPERS (3D Raycasting) ---
 
-    // We only care if the TARGET point is blocked or if the line crosses. 
-    // Actually, if the target is inside an obstacle (like a column), velocity is 0.
-    if (isInside(p2, rect)) return true;
+// Check if a line segment (P1 to P2) intersects an Axis-Aligned Bounding Box (AABB)
+const intersectRayBox = (p1: {x: number, y: number, z: number}, p2: {x: number, y: number, z: number}, box: {minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number}) => {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const dz = p2.z - p1.z;
+    const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
+    if (len === 0) return false;
 
-    // Line intersection test (Liang-Barsky or simpler axis separation for AABB)
-    // Simplified: Check intersection with 4 segments of rect
-    const segments = [
-        [{x: rect.x, y: rect.y}, {x: rect.x + rect.w, y: rect.y}], // Top
-        [{x: rect.x + rect.w, y: rect.y}, {x: rect.x + rect.w, y: rect.y + rect.h}], // Right
-        [{x: rect.x + rect.w, y: rect.y + rect.h}, {x: rect.x, y: rect.y + rect.h}], // Bottom
-        [{x: rect.x, y: rect.y + rect.h}, {x: rect.x, y: rect.y}] // Left
-    ];
+    const dirX = dx / len;
+    const dirY = dy / len;
+    const dirZ = dz / len;
 
-    const ccw = (A: any, B: any, C: any) => (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
-    const intersect = (A: any, B: any, C: any, D: any) => ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
+    let tMin = 0.0;
+    let tMax = len;
 
-    for (const seg of segments) {
-        if (intersect(p1, p2, seg[0], seg[1])) return true;
+    if (Math.abs(dirX) < 1e-9) {
+        if (p1.x < box.minX || p1.x > box.maxX) return false;
+    } else {
+        const t1 = (box.minX - p1.x) / dirX;
+        const t2 = (box.maxX - p1.x) / dirX;
+        tMin = Math.max(tMin, Math.min(t1, t2));
+        tMax = Math.min(tMax, Math.max(t1, t2));
     }
-    return false;
+
+    if (Math.abs(dirY) < 1e-9) {
+        if (p1.y < box.minY || p1.y > box.maxY) return false;
+    } else {
+        const t1 = (box.minY - p1.y) / dirY;
+        const t2 = (box.maxY - p1.y) / dirY;
+        tMin = Math.max(tMin, Math.min(t1, t2));
+        tMax = Math.min(tMax, Math.max(t1, t2));
+    }
+
+    if (Math.abs(dirZ) < 1e-9) {
+        if (p1.z < box.minZ || p1.z > box.maxZ) return false;
+    } else {
+        const t1 = (box.minZ - p1.z) / dirZ;
+        const t2 = (box.maxZ - p1.z) / dirZ;
+        tMin = Math.max(tMin, Math.min(t1, t2));
+        tMax = Math.min(tMax, Math.max(t1, t2));
+    }
+
+    return tMax >= tMin;
+};
+
+// --- ARCHIMEDES TRAJECTORY ---
+const calculateVerticalDeflection = (x: number, v0: number, dt: number, tr: number) => {
+    // dy = K * (dT / Tr) * (x^3 / V0^2)
+    // K is empirical constant. Approx 0.05 for typical diffusers.
+    if (v0 < 0.1) return 0;
+    const K = 0.05; 
+    const Tr_K = tr + 273.15; // Room temp in Kelvin
+    
+    // x is horizontal distance.
+    const deflection = K * (dt / Tr_K) * (Math.pow(x, 3) / Math.pow(v0, 2));
+    
+    // Limit deflection to realistic bounds to prevent math explosions close to 0 or very far
+    return Math.max(-3.0, Math.min(3.0, deflection));
+};
+
+const calculateEDT = (v: number, t: number, roomTemp: number) => {
+    // Effective Draft Temperature
+    // (Tx - Tr) - 8 * (Vx - 0.15)
+    return (t - roomTemp) - 8 * (v - 0.15);
 };
 
 // --- ГЛАВНАЯ ФУНКЦИЯ РАСЧЕТА СКОРОСТИ ---
 export const calculateWorkzoneVelocityAndCoverage = (
     v0: number, 
-    spec_A: number, // Ak (Effective Area) in mm²
+    spec_A: number, 
     diffuserHeight: number, 
     workZoneHeight: number,
-    m: number = 2.0, // Аэродинамический коэффициент формы
+    m: number = 2.0, 
     buoyancyFactor: number = 1.0 
 ) => {
     const dist = diffuserHeight - workZoneHeight;
-    
-    // Переводим площадь в метры для физики
     const Ak_m2 = spec_A > 0 ? spec_A / 1000000 : 0; 
     const l0 = Math.sqrt(Ak_m2); 
     const coreZone = 5 * l0; 
 
-    // Если мы прямо в диффузоре
     if (dist <= 0) {
         const initialRadius = Math.sqrt(spec_A) / 2000.0;
         return { workzoneVelocity: v0, coverageRadius: initialRadius };
     }
 
     let vx = v0;
-    
     if (dist < coreZone) {
-        // Зона 1: Скорость постоянна
         vx = v0;
     } else {
-        // Зона 3: Гиперболическое затухание Vx = (m * V0 * sqrt(Ak)) / x
         if (dist > 0) {
             vx = (m * v0 * l0) / dist;
         }
     }
 
-    // --- ПРИМЕНЯЕМ ВЛИЯНИЕ ТЕМПЕРАТУРЫ ---
     vx = vx * buoyancyFactor;
-
-    // Физические ограничения
     vx = Math.max(0.05, vx); 
 
-    // Расчет радиуса (линейное расширение)
     const initialRadius = Math.sqrt(spec_A) / 2000.0; 
     const coverageRadius = initialRadius + dist * 0.2; 
     
@@ -91,7 +121,6 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
     const spec = SPECS[diameter];
     if (!spec) return null;
 
-    // Исключения для несовместимых моделей
     if (modelId === 'dpu-s' && diameter === 100) return null;
     if (modelId === 'dpu-v' && diameter === 250) return null;
     if ((modelId === 'amn-adn' || modelId === '4ap') && typeof diameter === 'number') return null;
@@ -107,7 +136,6 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         return null;
     }
     
-    // Интерполяция табличных данных
     let pressure = 0, noise = 0, throwDist = 0;
     if (modePoints.length > 0) {
         let p1 = modePoints[0];
@@ -126,7 +154,6 @@ export const calculatePerformance = (modelId: string, flowType: string, diameter
         throwDist = interpolate(volume, p1.vol, p2.vol, p1.throw, p2.throw);
     }
 
-    // Расчет начальной скорости V0 через эффективное сечение
     const Ak = spec.f0; 
     const v0 = Ak > 0 ? volume / (3600 * Ak) : 0;
 
@@ -159,8 +186,6 @@ export const useScientificSimulation = (
         };
 
         const { v0 = 0, pressure = 0, noise = 0, throwDist = 0, spec } = perf;
-
-        // --- ФИЗИЧЕСКИЙ ДВИЖОК ---
         
         const g = 9.81;
         const T_ref = 273.15 + roomTemp; 
@@ -199,151 +224,303 @@ export const useScientificSimulation = (
 };
 
 // --- PROBE PHYSICS ---
+// Updated to use same Logic as calculateSimulationField where possible
+// For single point probe, we can simulate vector addition from all diffusers
 export const calculateProbeData = (
     x: number, 
     y: number, 
     diffusers: PlacedDiffuser[], 
     roomTemp: number, 
     supplyTemp: number,
-    obstacles: Obstacle[] = []
+    obstacles: Obstacle[] = [],
+    probeZ: number = 1.8 
 ): ProbeData => {
-    let maxV = 0;
-    let dominantDiffuser: PlacedDiffuser | null = null;
+    
+    // Vectors accumulator
+    let vxSum = 0;
+    let vySum = 0;
+    let scalarSum = 0; // for temperature weighting and mixing
+    let weightedTempSum = 0;
 
-    // 1. Calculate Velocity & Direction
+    const diffZ = 3.5; 
+
+    // Used for vector damping logic
+    const vectors: {vx: number, vy: number, mag: number}[] = [];
+
     diffusers.forEach(d => {
-        // Line of Sight Check
+        // Obstacle Check
         let isBlocked = false;
         for (const obs of obstacles) {
-            if (lineIntersectsRect(
-                {x: d.x, y: d.y}, 
-                {x, y}, 
-                {x: obs.x - obs.width/2, y: obs.y - obs.height/2, w: obs.width, h: obs.height}
-            )) {
-                isBlocked = true;
-                break;
+            const box = {
+                minX: obs.x - obs.width / 2, maxX: obs.x + obs.width / 2,
+                minY: obs.y - obs.length / 2, maxY: obs.y + obs.length / 2,
+                minZ: obs.z, maxZ: obs.z + obs.height
+            };
+            if (intersectRayBox({x: d.x, y: d.y, z: diffZ}, {x, y, z: probeZ}, box)) {
+                isBlocked = true; break;
+            }
+        }
+        const shadowFactor = isBlocked ? 0.15 : 1.0;
+
+        const dist2D = Math.sqrt(Math.pow(d.x - x, 2) + Math.pow(d.y - y, 2));
+        
+        const model = DIFFUSER_CATALOG.find(m => m.id === d.modelId);
+        const flowType = model?.modes[0].flowType || 'vertical';
+        const isHorizontal = flowType.includes('horizontal') || flowType === '4-way';
+
+        let vPoint = 0;
+
+        if (isHorizontal) {
+            const dt = supplyTemp - roomTemp;
+            const dy = calculateVerticalDeflection(dist2D, d.performance.v0, dt, roomTemp);
+            
+            const jetZ = diffZ + dy;
+            const distZ = Math.abs(probeZ - jetZ);
+            
+            const jetThickness = 0.15 * (dist2D + 0.5); 
+            const vertFactor = Math.exp(-Math.pow(distZ, 2) / (2 * Math.pow(jetThickness, 2)));
+
+            const Ak_m = Math.sqrt(d.performance.spec.A / 1000000); 
+            const decay = Math.min(1, (2.0 * Ak_m) / (dist2D + 0.1));
+            const vAxis = d.performance.v0 * decay;
+
+            vPoint = vAxis * vertFactor;
+        } else {
+            const radius = d.performance.coverageRadius;
+            if (dist2D <= radius) {
+                const vCore = d.performance.workzoneVelocity;
+                vPoint = vCore * Math.max(0, 1 - Math.pow(dist2D / radius, 1.5));
             }
         }
 
-        if (isBlocked) return; // Velocity from this diffuser is 0
+        vPoint *= shadowFactor;
 
-        const dist = Math.sqrt(Math.pow(d.x - x, 2) + Math.pow(d.y - y, 2));
-        const radius = d.performance.coverageRadius;
-        
-        if (dist <= radius) {
-            // Simplified Schlichting profile
-            const vCore = d.performance.workzoneVelocity;
-            const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
-            
-            if (vPoint > maxV) {
-                maxV = vPoint;
-                dominantDiffuser = d;
+        if (vPoint > 0.01) {
+            // Direction unit vector (from diffuser TO point)
+            let ux = 0, uy = 0;
+            if (dist2D > 0.001) {
+                ux = (x - d.x) / dist2D;
+                uy = (y - d.y) / dist2D;
             }
+            
+            const vx = vPoint * ux;
+            const vy = vPoint * uy;
+
+            vxSum += vx;
+            vySum += vy;
+            scalarSum += vPoint;
+            
+            // Assume T at point depends on mixing ratio. 
+            // Simple model: T_mix = (v1*T1 + v2*T2...) / sum(v)
+            // But T decays too. For simplicity we assume jet maintains T_supply relative to mixing.
+            // Actually jet temperature decays as it entrains room air. 
+            // dT_x = dT_0 * (V_x / V_0). Linear decay with velocity decay is a good approx for free jets.
+            const tempDecayFactor = vPoint / (d.performance.v0 || 1); // 0..1
+            const localT = roomTemp + (supplyTemp - roomTemp) * tempDecayFactor; // approximate
+            
+            weightedTempSum += vPoint * localT;
+            
+            vectors.push({ vx, vy, mag: vPoint });
         }
     });
 
-    const angle = dominantDiffuser 
-        ? Math.atan2(y - dominantDiffuser.y, x - dominantDiffuser.x)
-        : 0;
+    // Resultant Vector
+    let vMag = Math.sqrt(vxSum*vxSum + vySum*vySum);
 
-    // 2. Calculate Temperature (Mixing Model)
-    // Simple mixing: if v is high, t -> supplyTemp. If v is low, t -> roomTemp.
-    // Max practical velocity in work zone is usually around 0.5-1.0 m/s
-    const mixingFactor = Math.min(1, maxV / 0.8); 
-    const t = roomTemp + (supplyTemp - roomTemp) * mixingFactor;
+    // Collision Damping
+    if (vectors.length >= 2) {
+        // Find two strongest
+        vectors.sort((a, b) => b.mag - a.mag);
+        const vA = vectors[0];
+        const vB = vectors[1];
+        
+        // Dot product to find angle
+        const dot = vA.vx * vB.vx + vA.vy * vB.vy;
+        const magMult = vA.mag * vB.mag;
+        if (magMult > 0.0001) {
+            const cosTheta = dot / magMult;
+            // Angle in degrees. -1 (180 deg) to 1 (0 deg).
+            // Opposing if cosTheta < 0.
+            if (cosTheta < 0) {
+                // F_coll logic: 1 if 180 deg (cos=-1), 0 if 90 deg (cos=0)
+                // F_coll = -cosTheta
+                const fColl = -cosTheta;
+                // Damping: V = V * (1 - 0.5 * F_coll)
+                vMag *= (1 - 0.5 * fColl);
+            }
+        }
+    }
 
-    // 3. Calculate Draft Rating (ISO 7730)
-    // DR = (34 - t) * (v - 0.05)^0.62 * (0.37 * v * Tu + 3.14)
-    // Assume Turbulence Intensity (Tu) = 40% (0.4) for air jets
+    const t = scalarSum > 0 ? weightedTempSum / scalarSum : roomTemp;
+    const angle = Math.atan2(vySum, vxSum);
+
     let dr = 0;
-    const vCalc = Math.max(0.05, maxV); // Threshold for formula validity
-    const tu = 0.4; 
-    
+    const vCalc = Math.max(0.05, vMag); 
     if (vCalc > 0.05) {
         const term1 = (34 - t);
         const term2 = Math.pow(vCalc - 0.05, 0.62);
-        const term3 = (0.37 * vCalc * tu * 100) + 3.14; // Tu in percent for formula (usually) or decimal? 
-        // Standard ISO 7730: Tu is percentage (e.g., 40). 
-        // 0.37 * v * Tu + 3.14
-        
         dr = term1 * term2 * (0.37 * vCalc * 40 + 3.14);
     }
     
     return {
-        v: maxV,
+        v: vMag,
         t: t,
         angle: angle,
         dr: Math.min(100, Math.max(0, dr))
     };
 };
 
-// --- VISUALIZATION HELPERS ---
-
-export const calculateVelocityField = (
+// Replaces calculateVelocityField
+export const calculateSimulationField = (
     roomWidth: number, roomLength: number, placedDiffusers: any[], 
     diffuserHeight: number, workZoneHeight: number, gridStep: number = 0.5,
-    obstacles: Obstacle[] = []
-): number[][] => {
+    obstacles: Obstacle[] = [],
+    sliceZ: number = 1.1,
+    supplyTemp: number = 20,
+    roomTemp: number = 24
+): GridPoint[][] => {
     const cols = Math.ceil(roomWidth / gridStep);
     const rows = Math.ceil(roomLength / gridStep);
-    const field: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0));
+    const field: GridPoint[][] = Array(rows).fill(null).map(() => Array(cols).fill(null));
+
+    const diffusersWithProps = placedDiffusers.map((d: any) => {
+        const model = DIFFUSER_CATALOG.find(m => m.id === d.modelId);
+        const flowType = model?.modes[0].flowType || 'vertical';
+        const isHorizontal = flowType.includes('horizontal') || flowType === '4-way';
+        const Ak_m = Math.sqrt(d.performance.spec.A / 1000000);
+        return { ...d, isHorizontal, Ak_m };
+    });
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const x = c * gridStep + gridStep / 2;
             const y = r * gridStep + gridStep / 2;
+            const z = sliceZ;
             
-            let maxV = 0;
-            placedDiffusers.forEach(d => {
-                // Obstacle Check
+            let vxSum = 0;
+            let vySum = 0;
+            let scalarSum = 0;
+            let weightedTempSum = 0;
+            const vectors: {vx: number, vy: number, mag: number}[] = [];
+            
+            // Re-using logic loop for each point to be consistent with Probe Logic
+            diffusersWithProps.forEach((d: any) => {
                 let isBlocked = false;
                 for (const obs of obstacles) {
-                    // Quick AABB check for point inside obstacle
                     if (x >= obs.x - obs.width/2 && x <= obs.x + obs.width/2 && 
-                        y >= obs.y - obs.height/2 && y <= obs.y + obs.height/2) {
-                        isBlocked = true; 
-                        break;
+                        y >= obs.y - obs.length/2 && y <= obs.y + obs.length/2 && 
+                        z >= obs.z && z <= obs.z + obs.height) {
+                        isBlocked = true; break; 
                     }
-                    
-                    // Line of Sight
-                    if (lineIntersectsRect(
-                        {x: d.x, y: d.y}, 
-                        {x, y}, 
-                        {x: obs.x - obs.width/2, y: obs.y - obs.height/2, w: obs.width, h: obs.height}
-                    )) {
-                        isBlocked = true;
-                        break;
+                    const box = {
+                        minX: obs.x - obs.width / 2, maxX: obs.x + obs.width / 2,
+                        minY: obs.y - obs.length / 2, maxY: obs.y + obs.length / 2,
+                        minZ: obs.z, maxZ: obs.z + obs.height
+                    };
+                    if (intersectRayBox({x: d.x, y: d.y, z: diffuserHeight}, {x, y, z}, box)) {
+                        isBlocked = true; break;
+                    }
+                }
+                
+                if (isBlocked) return; 
+
+                const dist2D = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
+                let vPoint = 0;
+
+                if (d.isHorizontal) {
+                    // Approximation from Ar/dT
+                    const Ar = d.performance.Ar || -0.01; 
+                    const g = 9.81;
+                    const l0 = d.Ak_m;
+                    const K = 5.0; 
+                    const dy = K * (Ar / (g * l0)) * Math.pow(dist2D, 3);
+                    const jetZ = diffuserHeight + dy; 
+                    const distZ = Math.abs(z - jetZ);
+                    const jetThickness = 0.15 * (dist2D + 0.5);
+                    const vertFactor = Math.exp(-Math.pow(distZ, 2) / (2 * Math.pow(jetThickness, 2)));
+                    const decay = Math.min(1, (2.0 * d.Ak_m) / (dist2D + 0.1));
+                    vPoint = d.performance.v0 * decay * vertFactor;
+                } else {
+                    const radius = d.performance.coverageRadius;
+                    if (dist2D <= radius) {
+                        const vCore = d.performance.workzoneVelocity;
+                        vPoint = vCore * Math.max(0, 1 - Math.pow(dist2D / radius, 1.5));
                     }
                 }
 
-                if (!isBlocked) {
-                    const dist = Math.sqrt(Math.pow(x - d.x, 2) + Math.pow(y - d.y, 2));
-                    const radius = d.performance.coverageRadius;
-                    if (dist <= radius) {
-                        const vCore = d.performance.workzoneVelocity;
-                        const vPoint = vCore * Math.max(0, 1 - Math.pow(dist / radius, 1.5));
-                        if (vPoint > maxV) maxV = vPoint;
+                if (vPoint > 0.01) {
+                    let ux = 0, uy = 0;
+                    if (dist2D > 0.001) {
+                        ux = (x - d.x) / dist2D;
+                        uy = (y - d.y) / dist2D;
                     }
+                    const vx = vPoint * ux;
+                    const vy = vPoint * uy;
+                    vxSum += vx;
+                    vySum += vy;
+                    scalarSum += vPoint;
+                    
+                    const tempDecayFactor = vPoint / (d.performance.v0 || 1);
+                    const localT = roomTemp + (supplyTemp - roomTemp) * tempDecayFactor;
+                    weightedTempSum += vPoint * localT;
+
+                    vectors.push({ vx, vy, mag: vPoint });
                 }
             });
-            field[r][c] = maxV;
+
+            // Vector Sum Magnitude
+            let vMag = Math.sqrt(vxSum*vxSum + vySum*vySum);
+
+            // Collision Damping Logic
+            if (vectors.length >= 2) {
+                vectors.sort((a, b) => b.mag - a.mag);
+                const vA = vectors[0];
+                const vB = vectors[1];
+                const dot = vA.vx * vB.vx + vA.vy * vB.vy;
+                const magMult = vA.mag * vB.mag;
+                if (magMult > 0.0001) {
+                    const cosTheta = dot / magMult;
+                    if (cosTheta < 0) {
+                        const fColl = -cosTheta; // 0 to 1
+                        vMag *= (1 - 0.5 * fColl);
+                    }
+                }
+            }
+
+            // Turbulence: Difference between scalar sum and vector sum
+            // High when flows oppose
+            const turbulence = scalarSum - vMag;
+
+            // Temperature Calculation
+            const tPoint = scalarSum > 0 ? weightedTempSum / scalarSum : roomTemp;
+            
+            // Calculate EDT
+            const edt = calculateEDT(vMag, tPoint, roomTemp);
+
+            field[r][c] = { v: vMag, t: tPoint, edt, turbulence };
         }
     }
     return field; 
 };
 
-export const analyzeCoverage = (velocityField: number[][]) => {
+export const analyzeField = (field: GridPoint[][]) => {
     let totalPoints = 0;
     let coveredPoints = 0;
     let totalVelocity = 0;
-    let comfortZones = 0; // 0.1 - 0.25 m/s
-    let warningZones = 0; // 0.25 - 0.5 m/s
-    let draftZones = 0;   // > 0.5 m/s
-    let deadZones = 0;    // < 0.1 m/s
+    let comfortZones = 0;
+    let warningZones = 0; 
+    let draftZones = 0; 
+    let deadZones = 0;
+    
+    // ADPI Calculation
+    let adpiGoodPoints = 0;
 
-    velocityField.forEach(row => {
-        row.forEach(v => {
+    field.forEach(row => {
+        row.forEach(pt => {
+            if (!pt) return;
             totalPoints++;
+            const { v, edt } = pt;
+            
             if (v > 0.05) coveredPoints++; 
             totalVelocity += v;
 
@@ -351,13 +528,22 @@ export const analyzeCoverage = (velocityField: number[][]) => {
             else if (v >= 0.1 && v <= 0.25) comfortZones++;
             else if (v > 0.25 && v <= 0.5) warningZones++;
             else if (v > 0.5) draftZones++;
+
+            // ADPI Criteria (Simplified): -3 < EDT < 2 AND v < 0.35
+            // Prompt added additional v > 0.15 logic for visualization, adhering to general comfort
+            // but strict ADPI usually just limits max velocity. 
+            // We will use the prompt's definition for "Comfort" to align visual and metric
+            // Comfort (Good): -3 < EDT < 2 AND 0.15 < v < 0.35
+            if (edt > -3 && edt < 2 && v < 0.35 && v > 0.15) {
+                adpiGoodPoints++;
+            }
         });
     });
 
     if (totalPoints === 0) {
         return {
             totalCoverage: 0, avgVelocity: 0, comfortZones: 0,
-            warningZones: 0, draftZones: 0, deadZones: 0
+            warningZones: 0, draftZones: 0, deadZones: 0, adpi: 0
         };
     }
 
@@ -367,6 +553,7 @@ export const analyzeCoverage = (velocityField: number[][]) => {
         comfortZones,
         warningZones,
         draftZones,
-        deadZones
+        deadZones,
+        adpi: (adpiGoodPoints / totalPoints) * 100
     };
 };

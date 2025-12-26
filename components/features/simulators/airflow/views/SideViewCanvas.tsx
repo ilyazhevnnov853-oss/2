@@ -284,33 +284,35 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         if (!state.obstacles) return;
         
         state.obstacles.forEach(obs => {
-            const h = obs.type === 'wall_block' ? state.roomHeight : 1.0;
+            // Calculate Box dimensions in pixels
             const w = obs.width * ppm;
-            const screenH = h * ppm;
-            const screenX = (obs.x - obs.width/2) * ppm;
-            const screenY = (state.roomHeight - h) * ppm; // Floor is at bottom
-
-            // For furniture we assume it sits on floor.
-            // Screen Y = 0 is top. Floor Y = roomHeight * ppm.
-            // Furniture top Y = (roomHeight - h) * ppm.
+            const h = obs.height * ppm; // vertical thickness
             
+            // X position (projected)
+            const screenX = (obs.x - obs.width/2) * ppm;
+            
+            // Y position (vertical elevation)
+            // Canvas Y=0 is Ceiling. Floor Y = roomHeight * ppm.
+            // Obstacle Top Y = (RoomHeight - (z + height)) * ppm
+            const screenY = (state.roomHeight - (obs.z + obs.height)) * ppm;
+
             ctx.save();
             ctx.fillStyle = obs.type === 'wall_block' ? '#0f172a' : '#475569';
             ctx.strokeStyle = '#334155';
             ctx.lineWidth = 1;
             
             // Draw rectangle
-            ctx.fillRect(screenX, screenY, w, screenH);
-            ctx.strokeRect(screenX, screenY, w, screenH);
+            ctx.fillRect(screenX, screenY, w, h);
+            ctx.strokeRect(screenX, screenY, w, h);
             
             // Hatched pattern
             ctx.beginPath();
-            ctx.rect(screenX, screenY, w, screenH);
+            ctx.rect(screenX, screenY, w, h);
             ctx.clip();
             ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-            for (let i = -w; i < w + screenH; i += 10) {
+            for (let i = -w; i < w + h; i += 10) {
                 ctx.moveTo(screenX + i, screenY);
-                ctx.lineTo(screenX + i - screenH, screenY + screenH);
+                ctx.lineTo(screenX + i - h, screenY + h);
             }
             ctx.stroke();
             ctx.restore();

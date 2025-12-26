@@ -46,8 +46,8 @@ export interface ThreeDViewCanvasProps {
 
 export const getGlowColor = (t: number) => {
     if (t <= 18) return `64, 224, 255`;
-    if (t >= 28) return `255, 99, 132`;
-    if (t > 18 && t < 28) return `100, 255, 160`;
+    if (t >= 28) return `255, 99, 132`; 
+    if (t > 18 && t < 28) return `100, 255, 160`; 
     return `255, 255, 255`;
 };
 
@@ -138,7 +138,7 @@ export const spawnParticle = (
     let isSuction = false;
 
     const physicsAr = physics.Ar || 0; 
-    const visualGain = 50.0; 
+    const visualGain = 150.0; 
     const buoyancy = physicsAr * (physics.v0 * physics.v0) * ppm * visualGain;
 
     if (flowType === 'suction') {
@@ -270,7 +270,27 @@ export const updateParticlePhysics = (
         if (p.y > diffY - 10) p.active = false;
 
     } else {
+        // Apply buoyancy (Gravity or Lift)
         p.vy += p.buoyancy * dt; 
+        
+        // --- CHAOS / COLLISION DETECTION FOR PARTICLES ---
+        // If there are multiple diffusers, check if we are in a mixing zone
+        if (state.placedDiffusers && state.placedDiffusers.length > 1) {
+            // Simplified check: Are we near the midpoint of multiple sources?
+            // Or better: Calculate total velocity field at particle position locally
+            // Ideally we'd use the computed field, but it's 2D. 
+            // We approximate "Chaos" if particle is far from source and slow?
+            // Let's add random jitter if particle is "slow" but "active" - implies stagnation
+            const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy + p.vz*p.vz);
+            if (speed < 50 && p.age > 0.5) { // Slow moving, mature particle
+                 // Add random turbulence
+                 const chaos = 50.0;
+                 p.vx += (Math.random() - 0.5) * chaos * dt;
+                 p.vz += (Math.random() - 0.5) * chaos * dt;
+                 p.vy += (Math.random() - 0.5) * chaos * dt;
+            }
+        }
+
         p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
     }
@@ -284,7 +304,6 @@ export const updateParticlePhysics = (
     if (state.obstacles && p.active) {
         // Coordinates in state.obstacles are relative to Top-Left of Room.
         // Particle coordinates (p.x, p.z) are centered at (0,0) of room.
-        // Need to convert to same space.
         
         // Convert particle to 0-based coords (like Obstacles)
         // Particle X range: [-rw/2, rw/2] -> [0, rw]
@@ -297,18 +316,22 @@ export const updateParticlePhysics = (
             const obsX = obs.x * ppm;
             const obsZ = obs.y * ppm; // "y" in obstacle is Length/Z
             const obsW = obs.width * ppm;
-            const obsL = obs.height * ppm; // "height" in obstacle type is Length/Z
+            const obsL = obs.length * ppm; // "length" in obstacle type is Length/Z
             
             // Obstacle Vertical Height
             // furniture = 1.0m, wall_block = roomHeight
+            // Obstacle is on floor, so it occupies Y from 0 to obsH * ppm.
             const obsH = (obs.type === 'wall_block' ? state.roomHeight : 1.0) * ppm;
+            // The user input 'z' is elevation from floor. 
+            const obsElevation = obs.z * ppm;
+            const obsHeight = obs.height * ppm;
 
             // Check Collision (AABB)
             // Obstacle is centered at obsX, obsZ
             if (
                 pX_abs >= obsX - obsW/2 && pX_abs <= obsX + obsW/2 &&
                 pZ_abs >= obsZ - obsL/2 && pZ_abs <= obsZ + obsL/2 &&
-                pY_abs >= 0 && pY_abs <= obsH
+                pY_abs >= obsElevation && pY_abs <= obsElevation + obsHeight
             ) {
                 p.active = false;
                 break;

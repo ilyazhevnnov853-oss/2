@@ -2,16 +2,16 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp, Target,
-  MousePointer2, Ruler, BrickWall, Pipette
+  MousePointer2, Ruler, BrickWall, Pipette, Activity
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
-import { useScientificSimulation, calculateVelocityField, analyzeCoverage, calculateWorkzoneVelocityAndCoverage, calculatePerformance } from '../../../../hooks/useSimulation';
+import { useScientificSimulation, calculateSimulationField, analyzeField, calculateWorkzoneVelocityAndCoverage, calculatePerformance } from '../../../../hooks/useSimulation';
 import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
 import SimulatorHelpOverlay from './SimulatorHelpOverlay';
-import { PlacedDiffuser, PerformanceResult, Probe, ToolMode, Obstacle } from '../../../../types';
+import { PlacedDiffuser, PerformanceResult, Probe, ToolMode, Obstacle, GridPoint, VisualizationMode } from '../../../../types';
 
 const Simulator = ({ onBack, onHome }: any) => {
     // --- STATE ---
@@ -29,6 +29,7 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     // Default view is now 'top'
     const [viewMode, setViewMode] = useState<'side' | 'top' | '3d'>('top');
+    const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>('velocity');
     
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
@@ -43,14 +44,20 @@ const Simulator = ({ onBack, onHome }: any) => {
     // Simulation Data
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
-    const [velocityField, setVelocityField] = useState<number[][]>([]);
-    const [coverageAnalysis, setCoverageAnalysis] = useState({ totalCoverage: 0, avgVelocity: 0, comfortZones: 0, warningZones: 0, draftZones: 0, deadZones: 0 });
+    
+    // Updated Field State
+    const [simulationField, setSimulationField] = useState<GridPoint[][]>([]);
+    
+    const [coverageAnalysis, setCoverageAnalysis] = useState({ totalCoverage: 0, avgVelocity: 0, comfortZones: 0, warningZones: 0, draftZones: 0, deadZones: 0, adpi: 0 });
     
     // --- PROBE STATE ---
     const [probes, setProbes] = useState<Probe[]>([]);
 
     // --- OBSTACLE STATE ---
     const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+
+    // --- HEATMAP SLICE ---
+    const [heatmapZ, setHeatmapZ] = useState(1.1); // Default workzone height
 
     // UI Interaction State
     const [isDragging, setIsDragging] = useState(false);
@@ -84,18 +91,24 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, []);
     
     useEffect(() => {
-        // Do not calculate velocity field if power is OFF. This ensures "no flow" until start.
+        // Do not calculate if power is OFF. This ensures "no flow" until start.
         if (viewMode !== 'top' || placedDiffusers.length === 0 || !isPowerOn) { 
-            setVelocityField([]); 
+            setSimulationField([]); 
             return; 
         }
         
         const step = isDragging ? 0.5 : 0.1;
         
-        setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step, obstacles));
-    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging, isPowerOn, obstacles]);
+        // Use updated field calculation
+        setSimulationField(calculateSimulationField(
+            params.roomWidth, params.roomLength, placedDiffusers, 
+            params.diffuserHeight, params.workZoneHeight, step, 
+            obstacles, heatmapZ,
+            params.temperature, params.roomTemp
+        ));
+    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging, isPowerOn, obstacles, heatmapZ, params.temperature, params.roomTemp]);
     
-    useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
+    useEffect(() => { setCoverageAnalysis(analyzeField(simulationField)); }, [simulationField]);
     
     // Stable handlers for DiffuserCanvas
     const removeDiffuser = useCallback((id: string) => { 
@@ -104,8 +117,8 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, [selectedDiffuserId]);
 
     const duplicateDiffuser = useCallback((id: string) => {
-        if (placementMode === 'single') {
-            alert("В режиме 'Одиночный' можно добавить только одно устройство.");
+        if (placementMode === 'single' && placedDiffusers.length >= 1) {
+            alert("В режиме 'Одиночный' можно добавить только одно устройство. Переключитесь в 'Мульти'.");
             return;
         }
         
@@ -153,6 +166,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         };
         setPlacedDiffusers(prev => [...prev, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
+        setActiveTool('select');
     }, [placedDiffusers, params.roomWidth, params.roomLength, placementMode]);
 
     useEffect(() => {
@@ -216,22 +230,10 @@ const Simulator = ({ onBack, onHome }: any) => {
         setPlacedDiffusers(prev => prev.map(d => ({ ...d, performance: calculatePlacedDiffuserPerformance(d) })));
     }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
 
-    const handleModeSwitch = (mode: 'single' | 'multi') => {
-        if (mode === 'single' && placedDiffusers.length > 1) {
-            if (confirm("Переход в режим 'Одиночный' удалит лишние устройства. Продолжить?")) {
-                setPlacedDiffusers([placedDiffusers[0]]);
-                setSelectedDiffuserId(placedDiffusers[0].id); 
-                setPlacementMode('single');
-            }
-        } else {
-            setPlacementMode(mode);
-        }
-    };
-
     // --- PROBE HANDLERS ---
     const addProbe = (x: number, y: number) => {
-        // Initialize z at workZoneHeight
-        const newProbe: Probe = { id: `p-${Date.now()}`, x, y, z: params.workZoneHeight };
+        // Initialize z at heatmapZ or workZoneHeight
+        const newProbe: Probe = { id: `p-${Date.now()}`, x, y, z: heatmapZ };
         setProbes(prev => [...prev, newProbe]);
     };
 
@@ -244,8 +246,17 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, []);
 
     // --- OBSTACLE HANDLERS ---
-    const addObstacle = (x: number, y: number, w: number = 1.0, h: number = 1.0, type: 'furniture' | 'wall_block' = 'furniture') => {
-        const newObs: Obstacle = { id: `o-${Date.now()}`, x, y, width: w, height: h, type };
+    const addObstacle = (x: number, y: number, w: number = 1.0, length: number = 1.0, type: 'furniture' | 'wall_block' = 'furniture') => {
+        // Floating obstacle defaults: Elevation 1.0m, Height 0.5m
+        const newObs: Obstacle = { 
+            id: `o-${Date.now()}`, 
+            x, y, 
+            width: w, length: length, 
+            type, 
+            z: type === 'wall_block' ? 0 : 1.0, 
+            height: type === 'wall_block' ? params.roomHeight : 0.5,
+            rotation: 0
+        };
         setObstacles(prev => [...prev, newObs]);
     };
 
@@ -269,10 +280,8 @@ const Simulator = ({ onBack, onHome }: any) => {
         const cx = roomW / 2;
         const cy = roomL / 2;
         
-        // 1. Check center first
         if (!isColliding(cx, cy, diffusers, spacing)) return { x: cx, y: cy };
 
-        // 2. Spiral Grid Search
         const maxLayers = Math.ceil(Math.max(roomW, roomL) / spacing);
         
         for (let layer = 1; layer <= maxLayers; layer++) {
@@ -280,13 +289,12 @@ const Simulator = ({ onBack, onHome }: any) => {
             const end = layer;
             const candidates = [];
             for (let i = start; i <= end; i++) {
-                candidates.push({ x: i, y: -layer }); // Top
-                candidates.push({ x: i, y: layer });  // Bottom
-                if (Math.abs(i) !== layer) candidates.push({ x: -layer, y: i }); // Left
-                if (Math.abs(i) !== layer) candidates.push({ x: layer, y: i });  // Right
+                candidates.push({ x: i, y: -layer });
+                candidates.push({ x: i, y: layer });
+                if (Math.abs(i) !== layer) candidates.push({ x: -layer, y: i });
+                if (Math.abs(i) !== layer) candidates.push({ x: layer, y: i });
             }
             
-            // Sort by distance to center
             candidates.sort((a, b) => (a.x*a.x + a.y*a.y) - (b.x*b.x + b.y*b.y));
 
             for (const cand of candidates) {
@@ -341,6 +349,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         }
         
         setSelectedDiffuserId(newDiffuser.id);
+        setActiveTool('select');
     };
 
     const updateDiffuserPosition = useCallback((id: string, x: number, y: number) => {
@@ -397,10 +406,37 @@ const Simulator = ({ onBack, onHome }: any) => {
                 isHelpMode={isHelpMode}
                 // Obstacles
                 setObstacles={setObstacles}
+                // Placement
+                placementMode={placementMode}
+                setPlacementMode={setPlacementMode}
+                // Heatmap Z
+                heatmapZ={heatmapZ}
+                setHeatmapZ={setHeatmapZ}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
             <div className="flex-1 flex flex-col relative h-full overflow-hidden p-0 lg:p-4 lg:pl-0">
+                
+                {/* ADPI BADGE */}
+                {viewMode === 'top' && isPowerOn && simulationField.length > 0 && (
+                    <div className="absolute top-4 right-4 z-30 pointer-events-none hidden lg:block">
+                        <div className={`
+                            flex items-center gap-3 p-3 rounded-2xl bg-[#0f1016]/90 backdrop-blur-xl border border-white/10 shadow-2xl
+                            ${coverageAnalysis.adpi > 80 ? 'border-emerald-500/30' : coverageAnalysis.adpi < 70 ? 'border-red-500/30' : 'border-amber-500/30'}
+                        `}>
+                            <div className={`p-2 rounded-xl text-white ${coverageAnalysis.adpi > 80 ? 'bg-emerald-500' : coverageAnalysis.adpi < 70 ? 'bg-red-500' : 'bg-amber-500'}`}>
+                                <Activity size={18} />
+                            </div>
+                            <div>
+                                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">ADPI Score</div>
+                                <div className={`text-xl font-black ${coverageAnalysis.adpi > 80 ? 'text-emerald-400' : coverageAnalysis.adpi < 70 ? 'text-red-400' : 'text-amber-400'}`}>
+                                    {coverageAnalysis.adpi.toFixed(0)}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* CANVAS */}
                 <div ref={containerRef} className="flex-1 lg:rounded-[48px] overflow-hidden relative shadow-2xl bg-white dark:bg-[#030304] border-b lg:border border-black/5 dark:border-white/5 ring-1 ring-black/5 dark:ring-white/5 group transition-colors duration-500">
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
@@ -422,7 +458,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                         viewMode={viewMode} placedDiffusers={placedDiffusers} 
                         onUpdateDiffuserPos={updateDiffuserPosition} onSelectDiffuser={setSelectedDiffuserId}
                         onRemoveDiffuser={removeDiffuser} onDuplicateDiffuser={duplicateDiffuser} selectedDiffuserId={selectedDiffuserId}
-                        showHeatmap={showHeatmap} velocityField={velocityField} gridStep={isDragging ? 0.5 : 0.1}
+                        showHeatmap={showHeatmap} simulationField={simulationField} gridStep={isDragging ? 0.5 : 0.1}
                         snapToGrid={snapToGrid} gridSnapSize={0.5}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
@@ -439,6 +475,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                         onAddObstacle={addObstacle}
                         onRemoveObstacle={removeObstacle}
                         onUpdateObstacle={updateObstacle}
+                        // ADPI Viz
+                        visualizationMode={visualizationMode}
                     />
                 </div>
                 
@@ -501,13 +539,15 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
                         
                         {/* --- TOOLBAR --- */}
-                        <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5 mr-1">
-                            <ToolButton active={activeTool === 'select'} onClick={() => setActiveTool('select')} icon={<MousePointer2 size={16} />} title="Выбор и перемещение" />
-                            <ToolButton active={activeTool === 'probe'} onClick={() => setActiveTool('probe')} icon={<Target size={16} />} title="Точка измерения" />
-                            <ToolButton active={activeTool === 'measure'} onClick={() => setActiveTool('measure')} icon={<Ruler size={16} />} title="Линейка" />
-                            <ToolButton active={activeTool === 'obstacle'} onClick={() => setActiveTool('obstacle')} icon={<BrickWall size={16} />} title="Препятствие" />
-                            <ToolButton active={activeTool === 'pipette'} onClick={() => setActiveTool('pipette')} icon={<Pipette size={16} />} title="Копировать свойства" />
-                        </div>
+                        {viewMode === 'top' && (
+                            <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5 mr-1">
+                                <ToolButton active={activeTool === 'select'} onClick={() => setActiveTool('select')} icon={<MousePointer2 size={16} />} title="Выбор и перемещение" />
+                                <ToolButton active={activeTool === 'probe'} onClick={() => setActiveTool('probe')} icon={<Target size={16} />} title="Точка измерения" />
+                                <ToolButton active={activeTool === 'measure'} onClick={() => setActiveTool('measure')} icon={<Ruler size={16} />} title="Линейка" />
+                                <ToolButton active={activeTool === 'obstacle'} onClick={() => setActiveTool('obstacle')} icon={<BrickWall size={16} />} title="Препятствие" />
+                                <ToolButton active={activeTool === 'pipette'} onClick={() => setActiveTool('pipette')} icon={<Pipette size={16} />} title="Копировать свойства" />
+                            </div>
+                        )}
 
                         {isPowerOn ? (
                             <>
@@ -515,7 +555,22 @@ const Simulator = ({ onBack, onHome }: any) => {
                                 {viewMode === 'top' && (
                                     <>
                                         <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
-                                        <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
+                                        
+                                        {/* Heatmap Toggle & Mode Switcher */}
+                                        <button 
+                                            onClick={() => {
+                                                if (!showHeatmap) {
+                                                    setShowHeatmap(true);
+                                                } else {
+                                                    // Toggle Mode if already showing
+                                                    setVisualizationMode(prev => prev === 'velocity' ? 'adpi' : 'velocity');
+                                                }
+                                            }} 
+                                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
+                                            title="Тепловая карта / ADPI"
+                                        >
+                                            {visualizationMode === 'adpi' && showHeatmap ? <Activity size={18}/> : <Thermometer size={18} />}
+                                        </button>
                                     </>
                                 )}
                                  <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт"><Download size={18} /></button>

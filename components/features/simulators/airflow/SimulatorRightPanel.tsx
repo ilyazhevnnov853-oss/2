@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Maximize, LayoutList, ScanLine, Ruler, Wind, X, Target, Trash2 } from 'lucide-react';
+import { Maximize, LayoutList, ScanLine, Ruler, Wind, X, Target, Trash2, AlertTriangle } from 'lucide-react';
 import { SectionHeader } from '../../../ui/Shared';
 import { InfoRow, AccordionItem } from './SimulatorUI';
 import { calculateProbeData } from '../../../../hooks/useSimulation';
@@ -21,6 +21,12 @@ export const SimulatorRightPanel = ({
     });
 
     const toggle = (key: string) => setSections((prev: any) => ({ ...prev, [key]: !prev[key] }));
+
+    // Safety Check for Cold Air Dumping
+    // If Archimedes Number is significantly negative (Cooling) and Velocity is low
+    // We infer risk.
+    const isCooling = params.temperature < params.roomTemp;
+    const isDumpingRisk = isCooling && physics.Ar < -0.05; // -0.05 is a threshold where drop is significant
 
     const Content = () => (
         <>
@@ -45,6 +51,19 @@ export const SimulatorRightPanel = ({
                                 <InfoRow label="В Рабочей Зоне" value={physics.workzoneVelocity.toFixed(2)} unit="м/с" subValue="Максимальная" />
                             </div>
                         </div>
+                        
+                        {/* DUMPING WARNING */}
+                        {isDumpingRisk && (
+                            <div className="mt-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
+                                <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                                <div>
+                                    <div className="text-[10px] font-bold text-amber-500 uppercase mb-1">Риск сваливания струи</div>
+                                    <p className="text-[10px] text-amber-200/80 leading-snug">
+                                        Холодный воздух падает в рабочую зону слишком быстро. Увеличьте скорость или температуру.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </AccordionItem>
                     
                     <AccordionItem 
@@ -94,7 +113,7 @@ export const SimulatorRightPanel = ({
                             <div className="mt-0 space-y-3">
                                 {probes.map((probe: any, idx: number) => {
                                     // Calculate realtime data for list view
-                                    const data = calculateProbeData(probe.x, probe.y, placedDiffusers, params.roomTemp, params.temperature);
+                                    const data = calculateProbeData(probe.x, probe.y, placedDiffusers, params.roomTemp, params.temperature, [], probe.z);
                                     const drColor = data.dr < 15 ? 'text-emerald-400' : data.dr < 25 ? 'text-amber-400' : 'text-red-400';
                                     
                                     return (
@@ -104,7 +123,7 @@ export const SimulatorRightPanel = ({
                                                     <div className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-slate-400">
                                                         {idx + 1}
                                                     </div>
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Точка {idx + 1}</span>
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">H={probe.z.toFixed(1)}m</span>
                                                 </div>
                                                 <button onClick={() => onRemoveProbe(probe.id)} className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
                                                     <Trash2 size={12} />

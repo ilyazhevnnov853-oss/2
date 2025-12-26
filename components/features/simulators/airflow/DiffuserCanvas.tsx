@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle } from '../../../../types';
+import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle, GridPoint, VisualizationMode } from '../../../../types';
 import SideViewCanvas from './views/SideViewCanvas';
 import TopViewCanvas from './views/TopViewCanvas';
 import ThreeDViewCanvas from './views/ThreeDViewCanvas';
@@ -32,7 +32,7 @@ interface DiffuserCanvasProps {
   onDragEnd?: () => void;
   selectedDiffuserId?: string | null;
   showHeatmap?: boolean;
-  velocityField?: number[][];
+  simulationField?: GridPoint[][];
   dragPreview?: {x: number, y: number, width: number, height: number} | null;
   snapToGrid?: boolean;
   gridSnapSize?: number;
@@ -50,6 +50,8 @@ interface DiffuserCanvasProps {
   onAddObstacle?: (x: number, y: number, w?: number, h?: number, type?: 'furniture' | 'wall_block') => void;
   onRemoveObstacle?: (id: string) => void;
   onUpdateObstacle?: (id: string, updates: Partial<Obstacle>) => void;
+  // ADPI
+  visualizationMode?: VisualizationMode;
 }
 
 const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
@@ -86,7 +88,7 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 selectedDiffuserId={props.selectedDiffuserId}
                 showGrid={props.showGrid}
                 showHeatmap={props.showHeatmap || false}
-                velocityField={props.velocityField}
+                simulationField={props.simulationField}
                 snapToGrid={props.snapToGrid}
                 gridSnapSize={props.gridSnapSize}
                 gridStep={props.gridStep}
@@ -113,6 +115,8 @@ const DiffuserCanvas: React.FC<DiffuserCanvasProps> = (props) => {
                 // Pass Simulation Params for Calculation
                 roomTemp={props.roomTemp}
                 supplyTemp={props.temp}
+                // ADPI
+                visualizationMode={props.visualizationMode}
             />
         );
     } else if (props.viewMode === '3d') {

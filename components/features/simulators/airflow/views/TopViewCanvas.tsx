@@ -1,8 +1,9 @@
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser, Probe, ToolMode, Obstacle, GridPoint, VisualizationMode } from '../../../../../types';
 import { Trash2, Move, Copy, X } from 'lucide-react';
 import { calculateProbeData } from '../../../../../hooks/useSimulation';
+import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 interface TopViewCanvasProps {
   width: number; 
@@ -14,7 +15,7 @@ interface TopViewCanvasProps {
   selectedDiffuserId?: string | null;
   showGrid: boolean;
   showHeatmap: boolean;
-  velocityField?: number[][];
+  simulationField?: GridPoint[][];
   snapToGrid?: boolean;
   gridSnapSize?: number;
   gridStep?: number;
@@ -35,12 +36,13 @@ interface TopViewCanvasProps {
   onUpdateProbePos?: (id: string, pos: {x?: number, y?: number, z?: number}) => void;
   // Obstacle Props
   obstacles?: Obstacle[];
-  onAddObstacle?: (x: number, y: number, w?: number, h?: number, type?: 'furniture' | 'wall_block') => void;
+  onAddObstacle?: (x: number, y: number, w?: number, length?: number, type?: 'furniture' | 'wall_block') => void;
   onRemoveObstacle?: (id: string) => void;
   onUpdateObstacle?: (id: string, updates: Partial<Obstacle>) => void;
   
   roomTemp?: number;
   supplyTemp?: number;
+  visualizationMode?: VisualizationMode;
 }
 
 const getTopLayout = (w: number, h: number, rw: number, rl: number) => {
@@ -82,8 +84,9 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             prevProps.roomWidth !== props.roomWidth ||
             prevProps.roomLength !== props.roomLength ||
             prevProps.showHeatmap !== props.showHeatmap ||
+            prevProps.visualizationMode !== props.visualizationMode ||
             prevProps.showGrid !== props.showGrid ||
-            prevProps.velocityField !== props.velocityField ||
+            prevProps.simulationField !== props.simulationField ||
             prevProps.obstacles !== props.obstacles ||
             prevProps.probes !== props.probes
         ) {
@@ -114,34 +117,75 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(originX, originY, roomPixW, roomPixL);
 
-        // Heatmap
-        if (state.showHeatmap && state.velocityField && state.velocityField.length > 0 && state.gridStep) {
+        // Heatmap Logic
+        if (state.showHeatmap && state.simulationField && state.simulationField.length > 0 && state.gridStep) {
             const stepPx = state.gridStep * ppm;
+            
+            // Re-drawing using pixel manipulation or paths. Paths are easier for layers.
+            // ADPI Mode layers
+            // 1. Stagnant (Gray)
+            // 2. Draft (Blue)
+            // 3. Comfort (Green)
+            
             const comfortPath = new Path2D();
             const warningPath = new Path2D();
             const draftPath = new Path2D();
+            const stagnantPath = new Path2D();
 
-            for (let r = 0; r < state.velocityField.length; r++) {
-                for (let c = 0; c < state.velocityField[r].length; c++) {
-                    const v = state.velocityField[r][c];
-                    if (v < 0.1) continue;
+            for (let r = 0; r < state.simulationField.length; r++) {
+                for (let c = 0; c < state.simulationField[r].length; c++) {
+                    const pt = state.simulationField[r][c];
+                    if (!pt) continue;
                     
                     const x = originX + c * stepPx;
                     const y = originY + r * stepPx;
                     const drawSize = stepPx + 0.5;
 
-                    if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
-                    else if (v <= 0.5) warningPath.rect(x, y, drawSize, drawSize);
-                    else draftPath.rect(x, y, drawSize, drawSize);
+                    if (state.visualizationMode === 'adpi') {
+                        // ADPI Rules:
+                        // Stagnant: v < 0.1
+                        // Draft: EDT < -3 OR v > 0.35
+                        // Comfort: -3 < EDT < 2 AND 0.15 < v < 0.35
+                        
+                        if (pt.v < 0.1) {
+                            stagnantPath.rect(x, y, drawSize, drawSize);
+                        } else if (pt.edt < -3 || pt.v > 0.35) {
+                            draftPath.rect(x, y, drawSize, drawSize);
+                        } else if (pt.edt < 2 && pt.v > 0.15) {
+                            comfortPath.rect(x, y, drawSize, drawSize);
+                        } else {
+                            // Fallback for transition zones (e.g. 0.1 <= v <= 0.15 with good EDT)
+                            // Treat as semi-comfort or just leave dark
+                            // Let's group them into warning or just leave transparent
+                        }
+
+                    } else {
+                        // Velocity Mode (Standard)
+                        const v = pt.v;
+                        if (v < 0.1) continue;
+                        
+                        if (v <= 0.25) comfortPath.rect(x, y, drawSize, drawSize);
+                        else if (v <= 0.5) warningPath.rect(x, y, drawSize, drawSize);
+                        else draftPath.rect(x, y, drawSize, drawSize);
+                    }
                 }
             }
 
-            ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
-            ctx.fill(comfortPath);
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
-            ctx.fill(warningPath);
-            ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
-            ctx.fill(draftPath);
+            if (state.visualizationMode === 'adpi') {
+                ctx.fillStyle = 'rgba(100, 100, 100, 0.15)'; // Stagnant Gray
+                ctx.fill(stagnantPath);
+                ctx.fillStyle = 'rgba(59, 130, 246, 0.4)'; // Draft Blue
+                ctx.fill(draftPath);
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.4)'; // Comfort Green
+                ctx.fill(comfortPath);
+            } else {
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.25)'; // Comfort
+                ctx.fill(comfortPath);
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.3)'; // Warning
+                ctx.fill(warningPath);
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.35)'; // Draft
+                ctx.fill(draftPath);
+            }
         }
 
         ctx.strokeStyle = '#334155';
@@ -195,25 +239,25 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             state.obstacles.forEach(obs => {
                 if (obs.type === 'wall_block') {
                     const ox = originX + (obs.x - obs.width/2) * ppm;
-                    const oy = originY + (obs.y - obs.height/2) * ppm;
+                    const oy = originY + (obs.y - obs.length/2) * ppm; // Use LENGTH for Y
                     const ow = obs.width * ppm;
-                    const oh = obs.height * ppm;
+                    const ol = obs.length * ppm; // Use LENGTH for Y
                     
                     ctx.fillStyle = '#030304'; 
-                    ctx.fillRect(ox, oy, ow, oh);
+                    ctx.fillRect(ox, oy, ow, ol);
                     ctx.strokeStyle = '#334155';
                     ctx.lineWidth = 2;
-                    ctx.strokeRect(ox, oy, ow, oh);
+                    ctx.strokeRect(ox, oy, ow, ol);
                     
                     ctx.save();
                     ctx.beginPath();
-                    ctx.rect(ox, oy, ow, oh);
+                    ctx.rect(ox, oy, ow, ol);
                     ctx.clip();
                     ctx.strokeStyle = '#1e293b';
                     ctx.lineWidth = 1;
-                    for (let i = -ow; i < ow + oh; i += 10) {
+                    for (let i = -ow; i < ow + ol; i += 10) {
                         ctx.moveTo(ox + i, oy);
-                        ctx.lineTo(ox + i - oh, oy + oh);
+                        ctx.lineTo(ox + i - ol, oy + ol);
                     }
                     ctx.stroke();
                     ctx.restore();
@@ -233,7 +277,8 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             state.placedDiffusers || [], 
             state.roomTemp || 24, 
             state.supplyTemp || 20,
-            state.obstacles || []
+            state.obstacles || [],
+            probe.z
         );
         
         let color = '#34d399'; 
@@ -328,21 +373,27 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
             state.obstacles.forEach(obs => {
                 if (obs.type === 'furniture') {
                     const ox = originX + (obs.x - obs.width/2) * ppm;
-                    const oy = originY + (obs.y - obs.height/2) * ppm;
+                    const oy = originY + (obs.y - obs.length/2) * ppm; // Use LENGTH for Y
                     const ow = obs.width * ppm;
-                    const oh = obs.height * ppm;
+                    const ol = obs.length * ppm; // Use LENGTH for Y
                     
                     ctx.fillStyle = '#475569';
-                    ctx.fillRect(ox, oy, ow, oh);
+                    ctx.fillRect(ox, oy, ow, ol);
                     ctx.strokeStyle = '#94a3b8';
                     ctx.lineWidth = 2;
-                    ctx.strokeRect(ox, oy, ow, oh);
+                    ctx.strokeRect(ox, oy, ow, ol);
                     
+                    // Cross / X for center
                     ctx.beginPath();
-                    ctx.moveTo(ox, oy); ctx.lineTo(ox + ow, oy + oh);
-                    ctx.moveTo(ox + ow, oy); ctx.lineTo(ox, oy + oh);
+                    ctx.moveTo(ox, oy); ctx.lineTo(ox + ow, oy + ol);
+                    ctx.moveTo(ox + ow, oy); ctx.lineTo(ox, oy + ol);
                     ctx.lineWidth = 1;
                     ctx.stroke();
+                    
+                    // Label elevation
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '10px Inter';
+                    ctx.fillText(`h=${obs.z.toFixed(1)}m`, ox + 4, oy + 12);
                 }
             });
         }
@@ -491,9 +542,9 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
                     if (obs.type !== 'furniture') continue;
                     
                     const ox = originX + (obs.x - obs.width/2) * ppm;
-                    const oy = originY + (obs.y - obs.height/2) * ppm;
+                    const oy = originY + (obs.y - obs.length/2) * ppm;
                     const ow = obs.width * ppm;
-                    const oh = obs.height * ppm;
+                    const oh = obs.length * ppm;
                     
                     if (mouseX >= ox && mouseX <= ox + ow && mouseY >= oy && mouseY <= oy + oh) {
                         dragTargetRef.current = { type: 'obstacle', id: obs.id };
@@ -654,6 +705,11 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
         }
     };
 
+    const getDiffuserLabel = (modelId: string) => {
+        const model = DIFFUSER_CATALOG.find(m => m.id === modelId);
+        return model ? model.series : modelId;
+    };
+
     return (
         <div className="relative w-full h-full">
             <canvas 
@@ -671,24 +727,50 @@ const TopViewCanvas: React.FC<TopViewCanvasProps> = (props) => {
                 onTouchEnd={handleEnd}
                 style={{ touchAction: 'none' }}
             />
+
             {contextMenu && (
                 <div 
-                    className="fixed z-50 bg-[#1a1b26] border border-white/10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] p-1.5 flex flex-col min-w-[160px] animate-in zoom-in-95 duration-200 origin-top-left backdrop-blur-xl"
+                    className="fixed z-50 bg-[#1a1b26]/95 border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] p-1.5 flex flex-col min-w-[200px] animate-in zoom-in-95 duration-200 origin-top-left backdrop-blur-xl"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                 >
-                    <div className="px-3 py-2 border-b border-white/5 mb-1 flex justify-between items-center">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Действия</span>
+                    {/* INFO SECTION (Merged into Menu) */}
+                    {(() => {
+                        const d = props.placedDiffusers?.find(x => x.id === contextMenu.id);
+                        if (!d) return null;
+                        const model = DIFFUSER_CATALOG.find(m => m.id === d.modelId);
+                        return (
+                            <div className="p-3 bg-white/5 rounded-xl mb-1.5 border border-white/5 mx-1.5 mt-1.5">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <div className="text-[9px] font-bold text-blue-400 uppercase tracking-wider mb-0.5">{model?.series}</div>
+                                        <div className="text-sm font-black text-white leading-none">Ø{d.diameter} <span className="text-[10px] text-slate-400 font-medium">мм</span></div>
+                                    </div>
+                                    <div className="text-[10px] font-bold text-white bg-black/20 px-2 py-1 rounded-lg border border-white/5">{d.volume} м³/ч</div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5">
+                                    <div>
+                                        <div className="text-[9px] text-slate-500 font-bold uppercase">Скорость</div>
+                                        <div className="text-xs font-bold text-white">{d.performance.v0.toFixed(2)} м/с</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] text-slate-500 font-bold uppercase">Т° Потока</div>
+                                        <div className="text-xs font-bold text-white">{props.supplyTemp}°C</div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    <div className="px-3 py-1.5 border-b border-white/5 mb-1 flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Действия</span>
                         <button onClick={() => setContextMenu(null)} className="text-slate-500 hover:text-white transition-colors"><X size={12}/></button>
                     </div>
-                    <button onClick={() => handleContextAction('move')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
-                        <Move size={14} className="text-blue-400" />
-                        <span>Переместить</span>
-                    </button>
-                    <button onClick={() => handleContextAction('duplicate')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left">
+                    
+                    <button onClick={() => handleContextAction('duplicate')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white transition-colors text-left mx-1">
                         <Copy size={14} className="text-emerald-400" />
                         <span>Дублировать</span>
                     </button>
-                    <button onClick={() => handleContextAction('delete')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors text-left">
+                    <button onClick={() => handleContextAction('delete')} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-colors text-left mx-1 mb-1">
                         <Trash2 size={14} />
                         <span>Удалить</span>
                     </button>

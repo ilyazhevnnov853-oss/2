@@ -2,14 +2,25 @@
 import { ReactNode } from 'react';
 
 export type ToolMode = 'select' | 'probe' | 'measure' | 'obstacle' | 'pipette';
+export type VisualizationMode = 'velocity' | 'adpi';
 
 export interface Obstacle {
   id: string;
-  x: number; // Center X
-  y: number; // Center Y
-  width: number;
-  height: number;
+  x: number; // Center X (meters)
+  y: number; // Center Y (meters)
+  width: number; // Dimension X (meters)
+  length: number; // Dimension Y (meters) - Replaces 2D height
+  z: number; // Elevation from floor (meters)
+  height: number; // Thickness/Vertical Height (meters)
   type: 'furniture' | 'wall_block';
+  rotation: number; // Degrees
+}
+
+export interface GridPoint {
+  v: number;   // Velocity Magnitude
+  t: number;   // Temperature
+  edt: number; // Effective Draft Temperature
+  turbulence: number; // Turbulence intensity (0 to ~2.0+)
 }
 
 export interface Spec {
