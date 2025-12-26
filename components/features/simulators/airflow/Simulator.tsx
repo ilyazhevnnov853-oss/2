@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
-  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box
+  Download, Menu, ScanLine, Layers, GripHorizontal, Grid, Thermometer, Info, Box, Square, LayoutGrid, Power, Play, Pause, Lock, CircleHelp
 } from 'lucide-react';
 
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
@@ -8,6 +9,7 @@ import { useScientificSimulation, calculateVelocityField, analyzeCoverage, calcu
 import DiffuserCanvas from './DiffuserCanvas';
 import { SimulatorLeftPanel } from './SimulatorLeftPanel';
 import { SimulatorRightPanel } from './SimulatorRightPanel';
+import SimulatorHelpOverlay from './SimulatorHelpOverlay';
 import { PlacedDiffuser, PerformanceResult } from '../../../../types';
 
 const Simulator = ({ onBack, onHome }: any) => {
@@ -19,12 +21,22 @@ const Simulator = ({ onBack, onHome }: any) => {
     const [showGrid, setShowGrid] = useState(true);
     const [showHeatmap, setShowHeatmap] = useState(false);
     const [snapToGrid, setSnapToGrid] = useState(false);
-    const [viewMode, setViewMode] = useState<'side' | 'top' | '3d'>('side');
+    
+    // Help Mode State
+    const [isHelpMode, setIsHelpMode] = useState(false);
+    const [wasPlayingBeforeHelp, setWasPlayingBeforeHelp] = useState(false);
+
+    // CHANGED: Default view is now 'top'
+    const [viewMode, setViewMode] = useState<'side' | 'top' | '3d'>('top');
+    
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobileStatsOpen, setIsMobileStatsOpen] = useState(false); 
     const [openSection, setOpenSection] = useState<string | null>('distributor');
+    
+    // Placement Mode
+    const [placementMode, setPlacementMode] = useState<'single' | 'multi'>('single');
 
-    // Simulation Data
+    // Simulation Data - Start EMPTY
     const [placedDiffusers, setPlacedDiffusers] = useState<PlacedDiffuser[]>([]);
     const [selectedDiffuserId, setSelectedDiffuserId] = useState<string | null>(null);
     const [velocityField, setVelocityField] = useState<number[][]>([]);
@@ -62,12 +74,16 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, []);
     
     useEffect(() => {
-        if (viewMode !== 'top' || placedDiffusers.length === 0) { setVelocityField([]); return; }
+        // CHANGED: Do not calculate velocity field if power is OFF. This ensures "no flow" until start.
+        if (viewMode !== 'top' || placedDiffusers.length === 0 || !isPowerOn) { 
+            setVelocityField([]); 
+            return; 
+        }
         
         const step = isDragging ? 0.5 : 0.1;
         
         setVelocityField(calculateVelocityField(params.roomWidth, params.roomLength, placedDiffusers, params.diffuserHeight, params.workZoneHeight, step));
-    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging]);
+    }, [placedDiffusers, params.roomWidth, params.roomLength, params.diffuserHeight, params.workZoneHeight, viewMode, isDragging, isPowerOn]);
     
     useEffect(() => { setCoverageAnalysis(analyzeCoverage(velocityField)); }, [velocityField]);
     
@@ -78,12 +94,46 @@ const Simulator = ({ onBack, onHome }: any) => {
     }, [selectedDiffuserId]);
 
     const duplicateDiffuser = useCallback((id: string) => {
+        if (placementMode === 'single') {
+            alert("В режиме 'Одиночный' можно добавить только одно устройство.");
+            return;
+        }
+        
         const original = placedDiffusers.find(d => d.id === id);
         if (!original) return;
-        const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
         
-        let newX = Math.min(params.roomWidth - 0.5, Math.max(0, original.x + 0.5));
-        let newY = Math.min(params.roomLength - 0.5, Math.max(0, original.y + 0.5));
+        // Smart duplicate placement
+        const tryOffsets = [
+            {dx: 1, dy: 0}, {dx: -1, dy: 0}, {dx: 0, dy: 1}, {dx: 0, dy: -1},
+            {dx: 1, dy: 1}, {dx: 1, dy: -1}, {dx: -1, dy: 1}, {dx: -1, dy: -1}
+        ];
+
+        let newX = original.x + 0.5;
+        let newY = original.y + 0.5;
+        let found = false;
+
+        for (const offset of tryOffsets) {
+            const tx = Math.min(params.roomWidth - 0.5, Math.max(0.5, original.x + offset.dx));
+            const ty = Math.min(params.roomLength - 0.5, Math.max(0.5, original.y + offset.dy));
+            
+            const hasCollision = placedDiffusers.some(d => {
+                const dist = Math.sqrt(Math.pow(d.x - tx, 2) + Math.pow(d.y - ty, 2));
+                return dist < 0.8;
+            });
+
+            if (!hasCollision) {
+                newX = tx; newY = ty; found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+             // Fallback minimal shift if crowded, user will drag it
+             newX = Math.min(params.roomWidth - 0.5, Math.max(0.5, original.x + 0.2));
+             newY = Math.min(params.roomLength - 0.5, Math.max(0.5, original.y + 0.2));
+        }
+
+        const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
         
         const newDiffuser: PlacedDiffuser = { 
             ...original, 
@@ -94,7 +144,7 @@ const Simulator = ({ onBack, onHome }: any) => {
         };
         setPlacedDiffusers(prev => [...prev, newDiffuser]);
         setSelectedDiffuserId(newDiffuser.id);
-    }, [placedDiffusers, params.roomWidth, params.roomLength]);
+    }, [placedDiffusers, params.roomWidth, params.roomLength, placementMode]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -108,7 +158,30 @@ const Simulator = ({ onBack, onHome }: any) => {
 
     // --- LOGIC ---
     const toggleSection = (id: string) => setOpenSection(prev => prev === id ? null : id);
-    const togglePower = () => { setIsPowerOn(!isPowerOn); setIsPlaying(true); };
+    
+    // CHANGED: togglePower now handles switching views if needed, or simply enabling flow
+    const togglePower = () => { 
+        const newState = !isPowerOn;
+        setIsPowerOn(newState); 
+        setIsPlaying(true); 
+        // Note: We stay in Top view initially when starting, allowing user to switch manually now that it's unlocked
+    };
+
+    // Toggle Help Mode
+    const toggleHelp = () => {
+        if (!isHelpMode) {
+            // Turning ON Help
+            setWasPlayingBeforeHelp(isPlaying);
+            setIsPlaying(false);
+            setIsHelpMode(true);
+        } else {
+            // Turning OFF Help
+            setIsHelpMode(false);
+            if (wasPlayingBeforeHelp && isPowerOn) {
+                setIsPlaying(true);
+            }
+        }
+    };
 
     const topViewStats = useMemo(() => {
         if (placedDiffusers.length === 0) return { maxNoise: 0, calcTemp: params.roomTemp };
@@ -139,15 +212,103 @@ const Simulator = ({ onBack, onHome }: any) => {
         setPlacedDiffusers(prev => prev.map(d => ({ ...d, performance: calculatePlacedDiffuserPerformance(d) })));
     }, [params.diffuserHeight, params.workZoneHeight, params.roomHeight]);
 
+    const handleModeSwitch = (mode: 'single' | 'multi') => {
+        if (mode === 'single' && placedDiffusers.length > 1) {
+            if (confirm("Переход в режим 'Одиночный' удалит лишние устройства. Продолжить?")) {
+                setPlacedDiffusers([placedDiffusers[0]]);
+                setSelectedDiffuserId(placedDiffusers[0].id); // Update selection to the only remaining diffuser
+                setPlacementMode('single');
+            }
+        } else {
+            setPlacementMode(mode);
+        }
+    };
+
+    // --- PLACEMENT HELPERS ---
+    const isColliding = (x: number, y: number, diffusers: PlacedDiffuser[], minDist: number) => {
+        return diffusers.some(d => {
+            const dist = Math.sqrt(Math.pow(d.x - x, 2) + Math.pow(d.y - y, 2));
+            return dist < minDist;
+        });
+    };
+
+    const findFreePosition = (diffusers: PlacedDiffuser[], roomW: number, roomL: number, spacing: number) => {
+        const cx = roomW / 2;
+        const cy = roomL / 2;
+        
+        // 1. Check center first
+        if (!isColliding(cx, cy, diffusers, spacing)) return { x: cx, y: cy };
+
+        // 2. Spiral Grid Search
+        const maxLayers = Math.ceil(Math.max(roomW, roomL) / spacing);
+        
+        for (let layer = 1; layer <= maxLayers; layer++) {
+            const start = -layer;
+            const end = layer;
+            const candidates = [];
+            for (let i = start; i <= end; i++) {
+                candidates.push({ x: i, y: -layer }); // Top
+                candidates.push({ x: i, y: layer });  // Bottom
+                if (Math.abs(i) !== layer) candidates.push({ x: -layer, y: i }); // Left
+                if (Math.abs(i) !== layer) candidates.push({ x: layer, y: i });  // Right
+            }
+            
+            // Sort by distance to center
+            candidates.sort((a, b) => (a.x*a.x + a.y*a.y) - (b.x*b.x + b.y*b.y));
+
+            for (const cand of candidates) {
+                const px = cx + cand.x * spacing;
+                const py = cy + cand.y * spacing;
+                
+                if (px >= 0.5 && px <= roomW - 0.5 && py >= 0.5 && py <= roomL - 0.5) {
+                    if (!isColliding(px, py, diffusers, spacing)) return { x: px, y: py };
+                }
+            }
+        }
+        return null;
+    };
+
     const addDiffuserToPlan = () => {
         if (!sizeSelected || physics.error) return;
+
+        // Restriction: Single Mode
+        if (placementMode === 'single' && placedDiffusers.length > 0) {
+            if(confirm("В режиме 'Одиночный' можно установить только один диффузор. Заменить текущий?")) {
+                 // Will be replaced below
+            } else {
+                return;
+            }
+        }
+
         const nextIndex = placedDiffusers.length > 0 ? Math.max(...placedDiffusers.map(d => d.index)) + 1 : 1;
+        let newX = params.roomWidth / 2;
+        let newY = params.roomLength / 2;
+
+        // Collision Logic: Multi Mode
+        if (placementMode === 'multi' && placedDiffusers.length > 0) {
+            const minSpacing = 1.0;
+            const pos = findFreePosition(placedDiffusers, params.roomWidth, params.roomLength, minSpacing);
+            if (pos) {
+                newX = pos.x;
+                newY = pos.y;
+            } else {
+                alert("Нет свободного места в центре. Освободите пространство.");
+                return;
+            }
+        }
+
         const newDiffuser: PlacedDiffuser = {
-            id: `d-${Date.now()}`, index: nextIndex, x: params.roomWidth / 2, y: params.roomLength / 2,
+            id: `d-${Date.now()}`, index: nextIndex, x: newX, y: newY,
             modelId: params.modelId, diameter: params.diameter, volume: params.volume, performance: physics 
         };
         newDiffuser.performance = calculatePlacedDiffuserPerformance(newDiffuser);
-        setPlacedDiffusers([...placedDiffusers, newDiffuser]);
+        
+        if (placementMode === 'single') {
+            setPlacedDiffusers([newDiffuser]);
+        } else {
+            setPlacedDiffusers(prev => [...prev, newDiffuser]);
+        }
+        
         setSelectedDiffuserId(newDiffuser.id);
     };
 
@@ -163,8 +324,15 @@ const Simulator = ({ onBack, onHome }: any) => {
         if (canvas) { const link = document.createElement('a'); link.download = `Aeroflow-${Date.now()}.png`; link.href = canvas.toDataURL(); link.click(); }
     };
 
+    // Logic for locking views
+    const areSimulationViewsLocked = !isPowerOn || placedDiffusers.length === 0;
+
     return (
         <div className="flex w-full h-[100dvh] bg-[#F5F5F7] dark:bg-[#020205] flex-col lg:flex-row relative font-sans text-slate-900 dark:text-slate-200 overflow-hidden transition-colors duration-500">
+             
+             {/* HELP OVERLAY */}
+             {isHelpMode && <SimulatorHelpOverlay onClose={toggleHelp} viewMode={viewMode} isPowerOn={isPowerOn} />}
+
              {/* AMBIENT BACKGROUND */}
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '8s'}} />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-40 animate-pulse" style={{animationDuration: '10s'}} />
@@ -181,6 +349,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 onBack={onBack}
                 isMobileMenuOpen={isMobileMenuOpen} setIsMobileMenuOpen={setIsMobileMenuOpen}
                 onAddDiffuser={addDiffuserToPlan}
+                isHelpMode={isHelpMode}
             />
 
             {/* --- MAIN CONTENT AREA --- */}
@@ -214,21 +383,105 @@ const Simulator = ({ onBack, onHome }: any) => {
                 </div>
                 
                  {/* FLOATING "ISLAND" BAR (Controls) */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none">
+                <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 w-[90%] max-w-md pointer-events-none transition-all duration-300 ${isHelpMode ? 'z-[210]' : 'z-40'}`}>
                     <div className="pointer-events-auto flex items-center p-1.5 rounded-full bg-white/80 dark:bg-[#0f1014]/90 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)]">
-                         <button onClick={() => setViewMode('side')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Layers size={16}/><span>Срез</span></button>
-                        <button onClick={() => setViewMode('top')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><ScanLine size={16}/><span>План</span></button>
-                        <button onClick={() => setViewMode('3d')} className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === '3d' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}><Box size={16}/><span>3D</span></button>
+                        
+                        <button 
+                            onClick={togglePower} 
+                            disabled={placedDiffusers.length === 0}
+                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 ${isPowerOn ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'} ${placedDiffusers.length === 0 ? 'opacity-50 cursor-not-allowed saturate-0' : ''}`}
+                            title={isPowerOn ? "Стоп" : "Старт"}
+                        >
+                            <Power size={18} />
+                        </button>
+
+                        {isPowerOn && (
+                            <button 
+                                onClick={() => setIsPlaying(!isPlaying)} 
+                                className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 ${isPlaying ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-black/10 dark:hover:bg-white/20' : 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'}`}
+                                title={isPlaying ? "Пауза" : "Продолжить"}
+                            >
+                                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                            </button>
+                        )}
+
+                        <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
+
+                        <button 
+                            onClick={() => !areSimulationViewsLocked && setViewMode('side')} 
+                            disabled={areSimulationViewsLocked}
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 
+                                ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
+                                ${areSimulationViewsLocked ? 'opacity-30 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent' : ''}
+                            `}
+                        >
+                            {areSimulationViewsLocked ? <Lock size={14}/> : <Layers size={16}/>}
+                            <span>Срез</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => setViewMode('top')} 
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                        >
+                            <ScanLine size={16}/><span>План</span>
+                        </button>
+                        
+                        <button 
+                            onClick={() => !areSimulationViewsLocked && setViewMode('3d')} 
+                            disabled={areSimulationViewsLocked}
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 
+                                ${viewMode === '3d' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
+                                ${areSimulationViewsLocked ? 'opacity-30 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent' : ''}
+                            `}
+                        >
+                            {areSimulationViewsLocked ? <Lock size={14}/> : <Box size={16}/>}
+                            <span>3D</span>
+                        </button>
                         
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
-                        <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                        
                         {viewMode === 'top' && (
-                            <>
-                                <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
-                                <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
-                            </>
+                            <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-full border border-black/5 dark:border-white/5 mr-1">
+                                <button 
+                                    onClick={() => handleModeSwitch('single')} 
+                                    className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${placementMode === 'single' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    title="Режим: Одиночный"
+                                >
+                                    <Square size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => handleModeSwitch('multi')} 
+                                    className={`w-9 h-9 flex items-center justify-center rounded-full transition-all ${placementMode === 'multi' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                    title="Режим: Мульти"
+                                >
+                                    <LayoutGrid size={16} />
+                                </button>
+                            </div>
                         )}
-                         <button onClick={handleExport} disabled={!isPowerOn} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 ${!isPowerOn ? 'opacity-30' : ''}`} title="Экспорт"><Download size={18} /></button>
+
+                        {isPowerOn ? (
+                            <>
+                                <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                                {viewMode === 'top' && (
+                                    <>
+                                        <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
+                                        <button onClick={() => setShowHeatmap(!showHeatmap)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Тепловая карта скоростей"><Thermometer size={18} /></button>
+                                    </>
+                                )}
+                                 <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт"><Download size={18} /></button>
+                            </>
+                        ) : null}
+
+                        {/* HELP BUTTON (NEW) */}
+                        <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
+                        <button 
+                            onClick={toggleHelp} 
+                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${isHelpMode ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
+                            title="Справка"
+                        >
+                            <CircleHelp size={18} />
+                        </button>
+
                     </div>
                 </div>
             </div>
@@ -242,6 +495,7 @@ const Simulator = ({ onBack, onHome }: any) => {
                 coverageAnalysis={coverageAnalysis}
                 isMobileStatsOpen={isMobileStatsOpen}
                 setIsMobileStatsOpen={setIsMobileStatsOpen}
+                isHelpMode={isHelpMode}
             />
         </div>
     );

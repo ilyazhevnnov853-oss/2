@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { PerformanceResult } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
+import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 const CONSTANTS = {
   BASE_TIME_STEP: 1/60, 
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 2000, 
+  MAX_PARTICLES: 4000, 
   SPAWN_RATE_BASE: 5,
   SPAWN_RATE_MULTIPLIER: 8
 };
@@ -44,6 +45,7 @@ interface SideViewCanvasProps {
   roomHeight: number; 
   diffuserHeight: number; 
   workZoneHeight: number;
+  placedDiffusers?: PlacedDiffuser[]; // Add this
 }
 
 // --- HELPERS ---
@@ -88,11 +90,36 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
     }, [props]);
 
     const spawnParticle = (p: Particle, state: SideViewCanvasProps, ppm: number) => {
-        const { physics, temp, flowType, modelId, width, roomHeight, diffuserHeight } = state;
+        // Determine Source
+        let activeDiffuser: {
+            x: number, // Projected onto Screen X
+            performance: PerformanceResult,
+            modelId: string
+        };
+
+        if (state.placedDiffusers && state.placedDiffusers.length > 0) {
+            const idx = Math.floor(Math.random() * state.placedDiffusers.length);
+            const d = state.placedDiffusers[idx];
+            activeDiffuser = {
+                x: d.x * ppm,
+                performance: d.performance,
+                modelId: d.modelId
+            };
+        } else {
+            // No diffusers placed -> No spawn
+            return;
+        }
+
+        const { performance: physics, modelId, x: centerX } = activeDiffuser;
+        const { temp, roomHeight, diffuserHeight } = state;
         
         if (physics.error) return;
         const spec = physics.spec;
         if (!spec || !spec.A) return;
+
+        // Try to get flowType from catalog, fallback to state
+        const catalogItem = DIFFUSER_CATALOG.find(c => c.id === modelId);
+        const flowType = catalogItem ? catalogItem.modes[0].flowType : state.flowType;
 
         const nozzleW = (spec.A / 1000) * ppm;
         const scale = ppm / 1000;
@@ -103,7 +130,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
         const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
 
-        let startX = width / 2;
+        let startX = centerX;
         let vx = 0, vy = 0;
         let drag = 0.96;
         let waveAmp = 5;
@@ -117,9 +144,9 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
 
         if (flowType === 'suction') {
             isSuction = true;
-            startX = Math.random() * width;
+            startX = Math.random() * state.width;
             const spawnY = Math.random() * state.height;
-            const targetX = width / 2;
+            const targetX = centerX;
             const targetY = diffuserYPos;
             const dx = targetX - startX;
             const dy = targetY - spawnY;
@@ -134,7 +161,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             if (flowType.includes('horizontal')) {
                 isHorizontal = true;
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.55);
+                startX = centerX + side * (nozzleW * 0.55);
                 const spread = (Math.random() - 0.5) * 0.1; 
                 const angle = side === 1 ? spread : Math.PI + spread;
                 vx = Math.cos(angle) * pxSpeed * 1.2; 
@@ -143,30 +170,30 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
             } else if (flowType === '4-way') {
                 isHorizontal = true;
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.55);
+                startX = centerX + side * (nozzleW * 0.55);
                 vx = side * pxSpeed * 1.0;
                 vy = pxSpeed * 0.1;
             } else if (modelId === 'dpu-m' && flowType.includes('vertical')) {
                 const side = Math.random() > 0.5 ? 1 : -1;
-                startX = width/2 + side * (nozzleW * 0.45);
+                startX = centerX + side * (nozzleW * 0.45);
                 const coneAngle = (35 + Math.random() * 10) * (Math.PI / 180);
                 vx = side * Math.sin(coneAngle) * pxSpeed;
                 vy = Math.cos(coneAngle) * pxSpeed;
                 waveAmp = 5; drag = 0.95;
             } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                startX = centerX + (Math.random() - 0.5) * nozzleW * 0.95;
                 const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180); 
                 vx = Math.sin(spreadAngle) * pxSpeed * 0.8;
                 vy = Math.cos(spreadAngle) * pxSpeed;
                 waveAmp = 8; drag = 0.96;
             } else if (flowType === 'vertical-swirl') {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.9;
+                startX = centerX + (Math.random() - 0.5) * nozzleW * 0.9;
                 const spread = (Math.random() - 0.5) * 1.5; 
                 vx = Math.sin(spread) * pxSpeed * 0.5;
                 vy = Math.cos(spread) * pxSpeed;
                 waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
             } else if (flowType === 'vertical-compact') {
-                startX = width/2 + (Math.random() - 0.5) * nozzleW * 0.95;
+                startX = centerX + (Math.random() - 0.5) * nozzleW * 0.95;
                 const spread = (Math.random() - 0.5) * 0.05; 
                 vx = Math.sin(spread) * pxSpeed * 0.3;
                 vy = Math.cos(spread) * pxSpeed * 1.3; 
@@ -186,8 +213,18 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         p.history.length = 0; 
     };
 
-    const drawDiffuserSideProfile = (ctx: CanvasRenderingContext2D, cx: number, ppm: number, state: SideViewCanvasProps) => {
-        const spec = state.physics.spec;
+    const drawDiffuserSideProfile = (
+        ctx: CanvasRenderingContext2D, 
+        cx: number, // Projected Screen X
+        ppm: number, 
+        state: SideViewCanvasProps,
+        overridePerf?: PerformanceResult,
+        overrideModelId?: string
+    ) => {
+        const perf = overridePerf || state.physics;
+        const modelId = overrideModelId || state.modelId;
+        const spec = perf.spec;
+        
         if (!spec || !spec.A) return;
 
         const scale = ppm / 1000;
@@ -210,10 +247,10 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         ctx.beginPath();
         ctx.moveTo(cx - wA/2, hD);
         
-        if (state.modelId === 'dpu-s') {
+        if (modelId === 'dpu-s') {
              ctx.lineTo(cx - wA/2 + 10, hTotal + 20);
              ctx.lineTo(cx + wA/2 - 10, hTotal + 20); ctx.lineTo(cx + wA/2, hD);
-        } else if (state.modelId === 'amn-adn') {
+        } else if (modelId === 'amn-adn') {
              ctx.rect(cx - wA/2, hD, wA, 5*scale);
         } else {
              ctx.quadraticCurveTo(cx - wA/2, hTotal, cx, hTotal + 5);
@@ -222,6 +259,15 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         ctx.closePath(); ctx.fill();
         ctx.restore();
     };
+
+    const drawAllDiffusers = (ctx: CanvasRenderingContext2D, ppm: number, state: SideViewCanvasProps) => {
+        if (state.placedDiffusers && state.placedDiffusers.length > 0) {
+            state.placedDiffusers.forEach(d => {
+                const screenX = d.x * ppm;
+                drawDiffuserSideProfile(ctx, screenX, ppm, state, d.performance, d.modelId);
+            });
+        }
+    }
 
     const drawSideViewGrid = (ctx: CanvasRenderingContext2D, w: number, h: number, ppm: number, state: SideViewCanvasProps) => {
         if (!state.showGrid) return;
@@ -271,7 +317,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 ctx.fillStyle = '#030304';
                 ctx.fillRect(0, 0, width, height);
                 drawSideViewGrid(ctx, width, height, ppm, state);
-                drawDiffuserSideProfile(ctx, width/2, ppm, state);
+                drawAllDiffusers(ctx, ppm, state);
                 requestRef.current = requestAnimationFrame(animate);
                 return;
         }
@@ -285,8 +331,16 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         const pool = particlePool.current;
         
         // 1. UPDATE AND SPAWN
+        // Calculate Max V0 for spawn rate across all diffusers
+        const maxV0 = (state.placedDiffusers && state.placedDiffusers.length > 0)
+            ? Math.max(...state.placedDiffusers.map(d => d.performance.v0 || 0))
+            : (state.physics.v0 || 0);
+
         if (isPowerOn && isPlaying && !state.physics.error) {
-            const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+            const diffusersCount = state.placedDiffusers?.length || 1;
+            const baseRate = CONSTANTS.SPAWN_RATE_BASE + maxV0 / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER;
+            const spawnRate = Math.ceil(baseRate * diffusersCount);
+            
             let spawnedCount = 0;
             for (let i = 0; i < pool.length; i++) {
                 if (!pool[i].active) {
@@ -314,21 +368,12 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
                 }
 
                 if (p.isSuction) {
-                    const targetX = width / 2;
-                    const targetY = (state.roomHeight - state.diffuserHeight) * ppm;
-                    const dx = targetX - p.x;
-                    const dy = targetY - p.y;
-                    const distSq = dx*dx + dy*dy;
-                    const dist = Math.sqrt(distSq);
-                    if (dist < 20) { 
-                        p.active = false;
-                        continue;
-                    }
-                    const force = ((state.physics.v0 || 0) * 2000) / (distSq + 100);
-                    p.vx += (dx / dist) * force * dt;
-                    p.vy += (dy / dist) * force * dt;
-                    p.x += p.vx; 
-                    p.y += p.vy;
+                    // Pull towards spawn origin in suction mode (simplified visualization)
+                    // (Assuming linear pull back to spawn point in physics calculation previously set)
+                    p.x += p.vx * dt; 
+                    p.y += p.vy * dt;
+                    const diffY = (state.roomHeight - state.diffuserHeight) * ppm;
+                    if (p.y > diffY - 10) p.active = false; 
                 } else {
                     if (p.isHorizontal) {
                         if (p.y < (height * 0.15) && Math.abs(p.vx) > 0.3) { p.vy += (0 - p.y) * 5.0 * dt; } 
@@ -391,7 +436,7 @@ const SideViewCanvas: React.FC<SideViewCanvasProps> = (props) => {
         }
 
         ctx.globalCompositeOperation = 'source-over';
-        drawDiffuserSideProfile(ctx, width/2, ppm, state);
+        drawAllDiffusers(ctx, ppm, state);
 
         requestRef.current = requestAnimationFrame(animate);
     }, []);

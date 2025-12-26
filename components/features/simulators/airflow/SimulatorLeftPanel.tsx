@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fan, ScanLine, Wind, Thermometer, Home, AlertTriangle, Power, PlusCircle, Play, Pause, X, ChevronLeft, CheckCircle2 } from 'lucide-react';
+import { Fan, ScanLine, Wind, Thermometer, Home, AlertTriangle, Power, PlusCircle, X, ChevronLeft, CheckCircle2 } from 'lucide-react';
 import { SPECS, DIFFUSER_CATALOG } from '../../../../constants';
 import { calculatePerformance } from '../../../../hooks/useSimulation';
 import { GlassButton, GlassSlider } from '../../../ui/Shared';
@@ -13,7 +13,8 @@ export const SimulatorLeftPanel = ({
     viewMode, isPlaying, setIsPlaying, 
     sizeSelected, setSizeSelected,
     onHome, onBack, isMobileMenuOpen, setIsMobileMenuOpen,
-    onAddDiffuser
+    onAddDiffuser,
+    isHelpMode
 }: any) => {
 
     const handleModelChange = (id: string) => {
@@ -57,8 +58,9 @@ export const SimulatorLeftPanel = ({
             )}
             
             <div className={`
-                fixed inset-y-0 left-0 z-[70] bg-white lg:bg-transparent lg:static w-[85vw] md:w-[420px] lg:w-[420px] h-[100dvh] lg:h-screen shrink-0 transition-transform duration-300 ease-out dark:bg-[#0a0a0f]
+                fixed inset-y-0 left-0 bg-white lg:bg-transparent lg:static w-[85vw] md:w-[420px] lg:w-[420px] h-[100dvh] lg:h-screen shrink-0 transition-transform duration-300 ease-out dark:bg-[#0a0a0f]
                 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                ${isHelpMode ? 'z-[210]' : 'z-[70]'}
                 p-0 lg:p-4 lg:pl-4 border-r border-black/5 dark:border-white/10 lg:border-none shadow-2xl lg:shadow-none
             `}>
                 <div className="flex-1 flex flex-col h-full lg:rounded-[32px] bg-white lg:bg-white/80 dark:bg-[#0a0a0f] lg:dark:bg-[#0a0a0f]/80 backdrop-blur-2xl lg:border border-black/5 dark:border-white/5 overflow-hidden ring-1 ring-black/5 dark:ring-white/5">
@@ -180,13 +182,13 @@ export const SimulatorLeftPanel = ({
                     </div>
 
                     {/* Footer Controls */}
-                    <div className="p-5 bg-white/60 dark:bg-[#050508]/60 border-t border-black/5 dark:border-white/5 backdrop-blur-xl absolute bottom-0 left-0 right-0 lg:relative">
-                            <div className="grid grid-cols-2 gap-3">
-                            <GlassButton onClick={togglePower} active={isPowerOn} icon={<Power size={18} />} label={isPowerOn ? "Стоп" : "Старт"} customClass={`${isPowerOn ? "bg-red-500 text-white shadow-lg shadow-red-500/30 border border-red-400/50" : "bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border border-emerald-400/50"}`}/>
-                            {viewMode === 'top' && <GlassButton onClick={() => { onAddDiffuser(); setIsMobileMenuOpen(false); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} />}
-                                {viewMode === 'side' && <GlassButton onClick={() => setIsPlaying(!isPlaying)} icon={isPlaying ? <Pause size={18}/> : <Play size={18}/>} secondary={true} disabled={!isPowerOn} />}
-                            </div>
-                    </div>
+                    {viewMode === 'top' && (
+                        <div className="p-5 bg-white/60 dark:bg-[#050508]/60 border-t border-black/5 dark:border-white/5 backdrop-blur-xl absolute bottom-0 left-0 right-0 lg:relative">
+                                <div className="grid grid-cols-1 gap-3">
+                                    <GlassButton onClick={() => { onAddDiffuser(); }} icon={<PlusCircle size={18} />} label="Добавить" secondary={true} disabled={!sizeSelected || !!physics.error} customClass="w-full bg-white/50 dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-black/5 dark:border-white/5 hover:bg-white dark:hover:bg-white/10" />
+                                </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </>

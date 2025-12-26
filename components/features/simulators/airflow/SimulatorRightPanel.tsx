@@ -5,7 +5,8 @@ import { InfoRow } from './SimulatorUI';
 
 export const SimulatorRightPanel = ({ 
     viewMode, physics, params, placedDiffusers, topViewStats, coverageAnalysis, 
-    isMobileStatsOpen, setIsMobileStatsOpen 
+    isMobileStatsOpen, setIsMobileStatsOpen,
+    isHelpMode
 }: any) => {
 
     const Content = () => (
@@ -79,7 +80,10 @@ export const SimulatorRightPanel = ({
     return (
         <>
             {/* Desktop Panel */}
-            <div className="hidden lg:flex flex-col w-[360px] h-screen shrink-0 relative z-20 p-4 pl-0">
+            <div className={`
+                hidden lg:flex flex-col w-[360px] h-screen shrink-0 relative p-4 pl-0 transition-all duration-300
+                ${isHelpMode ? 'z-[210]' : 'z-20'}
+            `}>
                 <div className="flex-1 rounded-[32px] bg-[#0a0a0f]/80 backdrop-blur-2xl border border-white/5 p-6 flex flex-col gap-6 shadow-2xl overflow-y-auto custom-scrollbar relative">
                     <div className="absolute top-0 right-0 w-full h-32 bg-gradient-to-b from-blue-900/10 to-transparent pointer-events-none"/>
                     <Content />
@@ -88,9 +92,10 @@ export const SimulatorRightPanel = ({
 
             {/* Mobile Bottom Sheet/Drawer */}
             <div className={`
-                fixed inset-x-0 bottom-0 z-[80] lg:hidden
+                fixed inset-x-0 bottom-0 lg:hidden
                 bg-[#0a0a0f] border-t border-white/10 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.8)]
                 transform transition-transform duration-300 ease-out flex flex-col max-h-[85vh]
+                ${isHelpMode ? 'z-[210]' : 'z-[80]'}
                 ${isMobileStatsOpen ? 'translate-y-0' : 'translate-y-full'}
             `}>
                 <div className="flex items-center justify-between p-5 border-b border-white/5">

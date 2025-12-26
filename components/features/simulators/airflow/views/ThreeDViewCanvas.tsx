@@ -96,7 +96,7 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
         if (!ctx) return;
 
         const state = simulationRef.current;
-        const { width, height, isPowerOn, isPlaying, roomHeight, roomWidth, roomLength, workZoneHeight } = state;
+        const { width, height, isPowerOn, isPlaying, roomHeight, roomWidth, roomLength, workZoneHeight, placedDiffusers } = state;
 
         if (!isPowerOn) {
             ctx.clearRect(0, 0, width, height);
@@ -144,6 +144,7 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
             });
             ctx.stroke();
 
+            // Draw Workzone
             if (workZoneHeight > 0) {
                 const wy = workZoneHeight * PPM;
                 const wc = [
@@ -157,13 +158,43 @@ const ThreeDViewCanvas: React.FC<ThreeDViewCanvasProps> = (props) => {
                 ctx.moveTo(wc[0].x, wc[0].y); ctx.lineTo(wc[1].x, wc[1].y); ctx.lineTo(wc[2].x, wc[2].y); ctx.lineTo(wc[3].x, wc[3].y);
                 ctx.closePath(); ctx.fill(); ctx.stroke();
             }
+
+            // Draw Diffuser Bodies in 3D
+            const diffY = (state.diffuserHeight) * PPM;
+            const sources = (placedDiffusers && placedDiffusers.length > 0) ? placedDiffusers : [{
+                x: state.roomWidth / 2, y: state.roomLength / 2, performance: state.physics, modelId: state.modelId
+            }];
+
+            sources.forEach(d => {
+                const cx = (d.x - state.roomWidth / 2) * PPM;
+                const cz = (d.y - state.roomLength / 2) * PPM;
+                const p = p3d(cx, diffY, cz);
+                
+                if (p.s > 0) {
+                    // Simple representation as a glowing dot/sphere
+                    const r = (d.performance.spec.A ? Math.sqrt(d.performance.spec.A)/50 : 0.15) * PPM * finalScale * 0.5;
+                    ctx.beginPath();
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.arc(p.x, p.y, Math.max(2, r), 0, Math.PI*2);
+                    ctx.fill();
+                }
+            });
         }
 
         const pool = particlesRef.current;
         const dt = CONSTANTS.BASE_TIME_STEP;
 
-        if (isPowerOn && isPlaying && !state.physics.error) {
-            const spawnRate = Math.ceil(CONSTANTS.SPAWN_RATE_BASE + (state.physics.v0 || 0) / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER);
+        // Logic to determine spawn rate based on MAX velocity of all diffusers
+        const maxV0 = state.placedDiffusers?.length 
+            ? Math.max(...state.placedDiffusers.map(d => d.performance.v0 || 0))
+            : (state.physics.v0 || 0);
+
+        if (isPowerOn && isPlaying && maxV0 > 0) {
+            // Scale spawn rate by number of diffusers to maintain density per device
+            const diffusersCount = state.placedDiffusers?.length || 1;
+            const baseRate = CONSTANTS.SPAWN_RATE_BASE + maxV0 / 2 * CONSTANTS.SPAWN_RATE_MULTIPLIER;
+            const spawnRate = Math.ceil(baseRate * diffusersCount);
+            
             let spawnedCount = 0;
             for (let i = 0; i < pool.length; i++) {
                 if (!pool[i].active) {

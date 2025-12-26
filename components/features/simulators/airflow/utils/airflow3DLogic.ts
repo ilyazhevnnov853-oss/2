@@ -1,10 +1,10 @@
-import { PerformanceResult } from '../../../../../types';
+import { PerformanceResult, PlacedDiffuser } from '../../../../../types';
 import { DIFFUSER_CATALOG } from '../../../../../constants';
 
 export const CONSTANTS = {
   BASE_TIME_STEP: 1/60,
   HISTORY_RECORD_INTERVAL: 0.015,
-  MAX_PARTICLES: 2500,
+  MAX_PARTICLES: 5000,
   SPAWN_RATE_BASE: 5,
   SPAWN_RATE_MULTIPLIER: 8,
 };
@@ -26,6 +26,7 @@ export interface ThreeDViewCanvasProps {
   width: number;
   height: number;
   physics: PerformanceResult;
+  placedDiffusers?: PlacedDiffuser[];
   isPowerOn: boolean;
   isPlaying: boolean;
   temp: number;
@@ -82,16 +83,47 @@ export const spawnParticle = (
     state: ThreeDViewCanvasProps, 
     ppm: number
 ) => {
-    const { physics, temp, flowType, modelId, roomHeight, diffuserHeight } = state;
+    // Select Source Diffuser
+    let activeDiffuser: {
+        x: number, y: number, // Top View Coordinates in meters
+        performance: PerformanceResult,
+        modelId: string
+    };
+
+    if (state.placedDiffusers && state.placedDiffusers.length > 0) {
+        // Pick a random diffuser to spawn from
+        const idx = Math.floor(Math.random() * state.placedDiffusers.length);
+        const d = state.placedDiffusers[idx];
+        activeDiffuser = {
+            x: d.x,
+            y: d.y,
+            performance: d.performance,
+            modelId: d.modelId
+        };
+    } else {
+        // If no diffusers are placed, do not spawn particles.
+        return;
+    }
+
+    const { performance: physics, modelId } = activeDiffuser;
+    const { temp, roomHeight, diffuserHeight, roomWidth, roomLength } = state;
         
     if (physics.error) return;
     const spec = physics.spec;
     if (!spec || !spec.A) return;
     
+    // Convert Position to 3D Space centered at (0,0,0)
+    const centerX = (activeDiffuser.x - roomWidth / 2) * ppm;
+    const centerZ = (activeDiffuser.y - roomLength / 2) * ppm;
+
     const nozzleW = (spec.A / 1000) * ppm;
     const startY = (diffuserHeight * ppm); 
     
     const pxSpeed = (physics.v0 || 0) * ppm * 0.8;
+
+    // Determine Flow Type from Model
+    const catalogItem = DIFFUSER_CATALOG.find(c => c.id === modelId);
+    const flowType = catalogItem ? catalogItem.modes[0].flowType : state.flowType;
 
     let startX = 0, startZ = 0;
     let vx = 0, vy = 0, vz = 0;
@@ -106,15 +138,17 @@ export const spawnParticle = (
 
     if (flowType === 'suction') {
         isSuction = true;
-        startX = (Math.random() - 0.5) * state.roomWidth * ppm;
-        startZ = (Math.random() - 0.5) * state.roomLength * ppm;
-        const spawnH = Math.random() * startY;
+        // Random position in room
+        const randX = (Math.random() - 0.5) * state.roomWidth * ppm;
+        const randZ = (Math.random() - 0.5) * state.roomLength * ppm;
+        const randY = Math.random() * startY;
         
-        p.x = startX; p.y = spawnH; p.z = startZ;
+        p.x = randX; p.y = randY; p.z = randZ;
         
-        const dx = 0 - startX;
-        const dy = startY - spawnH;
-        const dz = 0 - startZ;
+        // Target is the specific diffuser
+        const dx = centerX - randX;
+        const dy = startY - randY;
+        const dz = centerZ - randZ;
         const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         const force = ((physics.v0 || 0) * 500) / (dist + 10);
         
@@ -143,8 +177,8 @@ export const spawnParticle = (
                 vertSpeed = -pxSpeed * 0.2;
             }
             
-            startX = Math.cos(angle) * (nozzleW * 0.55);
-            startZ = Math.sin(angle) * (nozzleW * 0.55);
+            startX = centerX + Math.cos(angle) * (nozzleW * 0.55);
+            startZ = centerZ + Math.sin(angle) * (nozzleW * 0.55);
             
             if (flowType.includes('swirl')) { 
                 waveAmp = 15; waveFreq = 8; 
@@ -158,26 +192,28 @@ export const spawnParticle = (
             radSpeed = Math.sin(coneAngle) * speed;
             vertSpeed = -Math.cos(coneAngle) * speed;
             waveAmp = 5; drag = 0.95;
+            startX = centerX; startZ = centerZ;
 
         } else if (modelId === 'dpu-k' && flowType.includes('vertical')) {
             const spreadAngle = (Math.random() - 0.5) * 60 * (Math.PI / 180);
-            startX = (Math.random() - 0.5) * nozzleW * 0.95; 
-            startZ = (Math.random() - 0.5) * nozzleW * 0.95;
+            startX = centerX + (Math.random() - 0.5) * nozzleW * 0.95; 
+            startZ = centerZ + (Math.random() - 0.5) * nozzleW * 0.95;
             const rSpd = Math.sin(spreadAngle) * pxSpeed * 0.8; 
             radSpeed = Math.abs(rSpd);
             vertSpeed = -Math.cos(spreadAngle) * pxSpeed;
             waveAmp = 8; drag = 0.96;
 
         } else if (flowType === 'vertical-swirl') {
-            startX = (Math.random() - 0.5) * nozzleW * 0.9;
-            startZ = (Math.random() - 0.5) * nozzleW * 0.9;
+            startX = centerX + (Math.random() - 0.5) * nozzleW * 0.9;
+            startZ = centerZ + (Math.random() - 0.5) * nozzleW * 0.9;
             const spread = (Math.random() - 0.5) * 1.5;
             radSpeed = Math.sin(spread) * pxSpeed * 0.5;
             vertSpeed = -Math.cos(spread) * pxSpeed;
             waveAmp = 30 + Math.random() * 10; waveFreq = 6; drag = 0.94;
         } else {
-            startX = (Math.random() - 0.5) * nozzleW * 0.95;
-            startZ = (Math.random() - 0.5) * nozzleW * 0.95;
+            // Default/Compact
+            startX = centerX + (Math.random() - 0.5) * nozzleW * 0.95;
+            startZ = centerZ + (Math.random() - 0.5) * nozzleW * 0.95;
             const spread = (Math.random() - 0.5) * 0.05;
             radSpeed = Math.sin(spread) * pxSpeed * 0.3;
             vertSpeed = -Math.cos(spread) * pxSpeed * 1.3;
@@ -220,17 +256,14 @@ export const updateParticlePhysics = (
     const diffY = state.diffuserHeight * ppm;
 
     if (p.isSuction) {
-        const dx = 0 - p.x;
-        const dy = diffY - p.y;
-        const dz = 0 - p.z;
-        const dSq = dx*dx + dy*dy + dz*dz;
-        const dist = Math.sqrt(dSq);
-        if (dist < 20) { p.active = false; return; }
-        const force = ((state.physics.v0 || 0) * 2000) / (dSq + 100);
-        p.vx += (dx/dist)*force*dt;
-        p.vy += (dy/dist)*force*dt;
-        p.vz += (dz/dist)*force*dt;
-        p.x += p.vx; p.y += p.vy; p.z += p.vz;
+        // Simplified suction physics: particles travel based on initial vector towards source
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        
+        // Kill if close to ceiling/diffuser level
+        if (p.y > diffY - 10) p.active = false;
+
     } else {
         p.vy += p.buoyancy * dt; 
         p.vx *= p.drag; p.vy *= p.drag; p.vz *= p.drag;
