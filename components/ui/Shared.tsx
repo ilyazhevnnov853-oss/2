@@ -6,11 +6,19 @@ export const AppHeader = ({ title, subtitle, icon, onBack, onHome, rightContent 
     <div className="flex items-center justify-between p-4 mb-6 bg-white/60 dark:bg-[#14141e]/40 backdrop-blur-2xl rounded-3xl shrink-0 relative z-30 mx-4 mt-4 shadow-sm dark:shadow-none border border-black/5 dark:border-white/5 transition-colors duration-500">
         <div className="flex items-center gap-4">
             <div className="flex gap-2">
-                <button onClick={onHome} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                <button
+                    onClick={onHome}
+                    aria-label="На главную"
+                    className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
+                >
                     <Home size={18} />
                 </button>
                 {onBack && (
-                    <button onClick={onBack} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                    <button
+                        onClick={onBack}
+                        aria-label="Назад"
+                        className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
+                    >
                         <ChevronLeft size={18} />
                     </button>
                 )}
