@@ -137,7 +137,7 @@ const AppContent = () => {
     const renderSimulatorsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
+                <button aria-label="Назад" onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-slate-800 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-white dark:to-slate-500 tracking-tight">СИМУЛЯТОРЫ</h2>
@@ -157,7 +157,7 @@ const AppContent = () => {
     const renderCalculationsSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
+                <button aria-label="Назад" onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-slate-800 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-white dark:to-slate-500 tracking-tight">РАСЧЕТЫ</h2>
@@ -179,7 +179,7 @@ const AppContent = () => {
     const renderReferenceSection = () => (
         <div className="w-full max-w-5xl animate-in slide-in-from-right-8 fade-in duration-500 pb-20">
              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-10">
-                <button onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
+                <button aria-label="Назад" onClick={() => setLauncherSection('main')} className="p-3 md:p-4 rounded-2xl bg-white/40 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-colors backdrop-blur-md shadow-sm dark:shadow-none border border-white/5">
                     <ChevronLeft size={24}/>
                 </button>
                 <h2 className="text-2xl md:text-4xl font-black text-slate-800 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-white dark:to-slate-500 tracking-tight">ЗНАНИЯ</h2>
