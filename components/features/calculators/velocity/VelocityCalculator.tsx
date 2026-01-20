@@ -79,15 +79,15 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                     <div className="p-5 lg:p-6 border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent relative pt-safe-top">
                          <div className="flex justify-between items-center lg:hidden mb-4">
                             <h2 className="text-lg font-bold text-white">Меню</h2>
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
+                            <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Закрыть меню" className="p-2 bg-white/10 rounded-lg text-white"><X size={20} /></button>
                         </div>
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} aria-label="На главную" className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
                                     <Home size={18} />
                                 </button>
-                                <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                <button onClick={onBack} aria-label="Назад" className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
                                     <ChevronLeft size={18} />
                                 </button>
                             </div>
@@ -249,7 +249,7 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                     {/* Header */}
                     <div className="p-6 pt-safe-top lg:pt-8 pb-4 flex items-center justify-between relative z-10 bg-[#030304]/80 backdrop-blur-md lg:bg-transparent">
                         <div className="flex items-center gap-4">
-                            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden p-3 rounded-full bg-blue-600 text-white shadow-lg active:scale-95 transition-transform"><Menu size={20} /></button>
+                            <button onClick={() => setIsMobileMenuOpen(true)} aria-label="Открыть меню" className="lg:hidden p-3 rounded-full bg-blue-600 text-white shadow-lg active:scale-95 transition-transform"><Menu size={20} /></button>
                             <div>
                                 <h2 className="text-xl lg:text-2xl font-black text-white tracking-tight flex items-center gap-3">
                                     {mode === 'check' ? <Grid className="text-emerald-500" size={24} /> : <Wand2 className="text-teal-500" size={24} />}
