@@ -6,11 +6,19 @@ export const AppHeader = ({ title, subtitle, icon, onBack, onHome, rightContent 
     <div className="flex items-center justify-between p-4 mb-6 bg-white/60 dark:bg-[#14141e]/40 backdrop-blur-2xl rounded-3xl shrink-0 relative z-30 mx-4 mt-4 shadow-sm dark:shadow-none border border-black/5 dark:border-white/5 transition-colors duration-500">
         <div className="flex items-center gap-4">
             <div className="flex gap-2">
-                <button onClick={onHome} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                <button
+                    onClick={onHome}
+                    className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5"
+                    aria-label="На главную"
+                >
                     <Home size={18} />
                 </button>
                 {onBack && (
-                    <button onClick={onBack} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                    <button
+                        onClick={onBack}
+                        className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5"
+                        aria-label="Назад"
+                    >
                         <ChevronLeft size={18} />
                     </button>
                 )}
@@ -51,7 +59,7 @@ export const GlassMetric = ({ label, value, unit, color }: any) => (
 );
 
 // --- LIQUID BUTTON ---
-export const GlassButton = ({ onClick, icon, label, active, secondary, customClass, disabled }: any) => {
+export const GlassButton = ({ onClick, icon, label, active, secondary, customClass, disabled, ariaLabel }: any) => {
     let base = "relative overflow-hidden group h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wide shadow-md active:scale-95 ";
     
     // Active / Primary Style
@@ -69,7 +77,7 @@ export const GlassButton = ({ onClick, icon, label, active, secondary, customCla
     if (disabled) style += " opacity-50 cursor-not-allowed grayscale";
 
     return (
-        <button onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
+        <button onClick={onClick} disabled={disabled} className={`${base} ${style}`} aria-label={ariaLabel}>
             <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <span className={active ? 'scale-110' : 'group-hover:scale-110 transition-transform duration-300'}>{icon}</span>
             {label && <span>{label}</span>}
