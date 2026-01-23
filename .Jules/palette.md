@@ -1,0 +1,3 @@
+## 2025-10-27 - Fragmented Navigation & Accessibility Gaps
+**Learning:** The application uses copied-and-pasted navigation buttons (Home/Back) across multiple components (`App.tsx`, `SimulatorLeftPanel.tsx`, `VelocityCalculator.tsx`) instead of a single shared component. This fragmentation led to inconsistent accessibility: while some buttons had `title` attributes, many lacked `aria-label` entirely, making them inaccessible to screen readers.
+**Action:** When building navigation buttons, always enforce `aria-label` via a shared component or explicit prop, rather than relying on icons alone. Future refactoring should centralize this navigation logic into a reusable `NavigationHeader` component to ensure consistency.

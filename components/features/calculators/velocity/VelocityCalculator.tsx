@@ -84,10 +84,10 @@ const VelocityCalculator = ({ onBack, onHome }: any) => {
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} aria-label="На главную" className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none" title="На главную">
                                     <Home size={18} />
                                 </button>
-                                <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                <button onClick={onBack} aria-label="Назад" className="p-3 lg:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none" title="Назад">
                                     <ChevronLeft size={18} />
                                 </button>
                             </div>
