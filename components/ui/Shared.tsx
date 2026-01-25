@@ -6,11 +6,11 @@ export const AppHeader = ({ title, subtitle, icon, onBack, onHome, rightContent 
     <div className="flex items-center justify-between p-4 mb-6 bg-white/60 dark:bg-[#14141e]/40 backdrop-blur-2xl rounded-3xl shrink-0 relative z-30 mx-4 mt-4 shadow-sm dark:shadow-none border border-black/5 dark:border-white/5 transition-colors duration-500">
         <div className="flex items-center gap-4">
             <div className="flex gap-2">
-                <button onClick={onHome} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                <button aria-label="На главную" onClick={onHome} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none">
                     <Home size={18} />
                 </button>
                 {onBack && (
-                    <button onClick={onBack} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5">
+                    <button aria-label="Назад" onClick={onBack} className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white transition-all active:scale-95 border border-transparent dark:border-white/5 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none">
                         <ChevronLeft size={18} />
                     </button>
                 )}
@@ -51,8 +51,8 @@ export const GlassMetric = ({ label, value, unit, color }: any) => (
 );
 
 // --- LIQUID BUTTON ---
-export const GlassButton = ({ onClick, icon, label, active, secondary, customClass, disabled }: any) => {
-    let base = "relative overflow-hidden group h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wide shadow-md active:scale-95 ";
+export const GlassButton = ({ onClick, icon, label, ariaLabel, active, secondary, customClass, disabled }: any) => {
+    let base = "relative overflow-hidden group h-12 rounded-2xl flex items-center justify-center gap-2 transition-all font-bold text-xs uppercase tracking-wide shadow-md active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none ";
     
     // Active / Primary Style
     let style = active 
@@ -69,7 +69,7 @@ export const GlassButton = ({ onClick, icon, label, active, secondary, customCla
     if (disabled) style += " opacity-50 cursor-not-allowed grayscale";
 
     return (
-        <button onClick={onClick} disabled={disabled} className={`${base} ${style}`}>
+        <button onClick={onClick} disabled={disabled} className={`${base} ${style}`} aria-label={ariaLabel || label}>
             <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <span className={active ? 'scale-110' : 'group-hover:scale-110 transition-transform duration-300'}>{icon}</span>
             {label && <span>{label}</span>}
@@ -78,7 +78,7 @@ export const GlassButton = ({ onClick, icon, label, active, secondary, customCla
 };
 
 // --- LIQUID SLIDER (THICK TUBE STYLE) ---
-export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, gradient, color }: any) => {
+export const GlassSlider = ({ label, ariaLabel, icon, val, min, max, step, unit, onChange, gradient, color }: any) => {
     const pct = ((val - min) / (max - min)) * 100;
     
     let dynGrad = gradient || 'from-blue-600 via-blue-400 to-cyan-300';
@@ -114,6 +114,7 @@ export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, 
                     type="range" min={min} max={max} step={step} value={val} 
                     onChange={e => onChange(Number(e.target.value))} 
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    aria-label={ariaLabel || label}
                 />
                 
                 {/* Handle (Glowing Orb) */}
