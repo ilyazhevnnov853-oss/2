@@ -125,7 +125,7 @@ export const SimulatorRightPanel = ({
                                                     </div>
                                                     <span className="text-[10px] font-bold text-slate-500 uppercase">H={probe.z.toFixed(1)}m</span>
                                                 </div>
-                                                <button onClick={() => onRemoveProbe(probe.id)} className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+                                                <button onClick={() => onRemoveProbe(probe.id)} aria-label="Удалить точку измерения" className="text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
                                                     <Trash2 size={12} />
                                                 </button>
                                             </div>
@@ -197,7 +197,7 @@ export const SimulatorRightPanel = ({
                 <div className="flex items-center justify-between p-5 border-b border-white/5">
                      <div className="w-12 h-1 bg-white/10 rounded-full absolute top-3 left-1/2 -translate-x-1/2"></div>
                      <span className="font-bold text-white uppercase tracking-widest text-xs">Статистика</span>
-                     <button onClick={() => setIsMobileStatsOpen(false)} className="p-2 bg-white/10 rounded-full text-slate-400 hover:text-white"><X size={16}/></button>
+                     <button onClick={() => setIsMobileStatsOpen(false)} aria-label="Закрыть статистику" className="p-2 bg-white/10 rounded-full text-slate-400 hover:text-white"><X size={16}/></button>
                 </div>
                 <div className="p-6 overflow-y-auto custom-scrollbar pb-10">
                     <Content />
