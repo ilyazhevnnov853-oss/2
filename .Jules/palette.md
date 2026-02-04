@@ -1,0 +1,3 @@
+## 2024-05-22 - Fragmented Navigation Logic
+**Learning:** The app relies on conditional rendering in `App.tsx` and custom headers in feature components, leading to fragmented navigation logic. This results in inconsistent accessibility features (e.g., missing ARIA labels on back buttons) across different sections.
+**Action:** When implementing navigation or header components, prefer shared components like `AppHeader` or `FloatingDock` to ensure consistent accessibility behavior. If custom implementation is necessary, ensure standard ARIA attributes (`aria-label`) and focus states are manually applied.
