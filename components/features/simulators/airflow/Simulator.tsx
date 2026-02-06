@@ -370,8 +370,9 @@ const Simulator = ({ onBack, onHome }: any) => {
         <button 
             onClick={onClick}
             title={title}
+            aria-label={title}
             className={`
-                w-9 h-9 flex items-center justify-center rounded-full transition-all
+                w-9 h-9 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500
                 ${active 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -487,8 +488,9 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <button 
                             onClick={togglePower} 
                             disabled={placedDiffusers.length === 0}
-                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 ${isPowerOn ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'} ${placedDiffusers.length === 0 ? 'opacity-50 cursor-not-allowed saturate-0' : ''}`}
+                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isPowerOn ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'} ${placedDiffusers.length === 0 ? 'opacity-50 cursor-not-allowed saturate-0' : ''}`}
                             title={isPowerOn ? "Стоп" : "Старт"}
+                            aria-label={isPowerOn ? "Стоп" : "Старт"}
                         >
                             <Power size={18} />
                         </button>
@@ -496,8 +498,9 @@ const Simulator = ({ onBack, onHome }: any) => {
                         {isPowerOn && (
                             <button 
                                 onClick={() => setIsPlaying(!isPlaying)} 
-                                className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 ${isPlaying ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-black/10 dark:hover:bg-white/20' : 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'}`}
+                                className={`w-11 h-11 flex items-center justify-center rounded-full transition-all mr-1 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isPlaying ? 'bg-black/5 dark:bg-white/10 text-slate-900 dark:text-white hover:bg-black/10 dark:hover:bg-white/20' : 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'}`}
                                 title={isPlaying ? "Пауза" : "Продолжить"}
+                                aria-label={isPlaying ? "Пауза" : "Продолжить"}
                             >
                                 {isPlaying ? <Pause size={18} /> : <Play size={18} />}
                             </button>
@@ -508,10 +511,11 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <button 
                             onClick={() => !areSimulationViewsLocked && setViewMode('side')} 
                             disabled={areSimulationViewsLocked}
-                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-blue-500
                                 ${viewMode === 'side' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
                                 ${areSimulationViewsLocked ? 'opacity-30 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent' : ''}
                             `}
+                            aria-label="Срез"
                         >
                             {areSimulationViewsLocked ? <Lock size={14}/> : <Layers size={16}/>}
                             <span className="hidden sm:inline">Срез</span>
@@ -519,7 +523,8 @@ const Simulator = ({ onBack, onHome }: any) => {
                         
                         <button 
                             onClick={() => setViewMode('top')} 
-                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${viewMode === 'top' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
+                            aria-label="План"
                         >
                             <ScanLine size={16}/><span>План</span>
                         </button>
@@ -527,10 +532,11 @@ const Simulator = ({ onBack, onHome }: any) => {
                         <button 
                             onClick={() => !areSimulationViewsLocked && setViewMode('3d')} 
                             disabled={areSimulationViewsLocked}
-                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 
+                            className={`px-4 lg:px-5 py-3 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-blue-500
                                 ${viewMode === '3d' ? 'bg-blue-600 text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)]' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}
                                 ${areSimulationViewsLocked ? 'opacity-30 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent' : ''}
                             `}
+                            aria-label="3D вид"
                         >
                             {areSimulationViewsLocked ? <Lock size={14}/> : <Box size={16}/>}
                             <span className="hidden sm:inline">3D</span>
@@ -551,10 +557,10 @@ const Simulator = ({ onBack, onHome }: any) => {
 
                         {isPowerOn ? (
                             <>
-                                <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка"><Grid size={18} /></button>
+                                <button onClick={() => setShowGrid(!showGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${showGrid ? 'bg-black/10 dark:bg-white/10 text-slate-900 dark:text-white' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Сетка" aria-label="Сетка"><Grid size={18} /></button>
                                 {viewMode === 'top' && (
                                     <>
-                                        <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка"><GripHorizontal size={18} /></button>
+                                        <button onClick={() => setSnapToGrid(!snapToGrid)} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${snapToGrid ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} title="Привязка" aria-label="Привязка"><GripHorizontal size={18} /></button>
                                         
                                         {/* Heatmap Toggle & Mode Switcher */}
                                         <button 
@@ -566,22 +572,24 @@ const Simulator = ({ onBack, onHome }: any) => {
                                                     setVisualizationMode(prev => prev === 'velocity' ? 'adpi' : 'velocity');
                                                 }
                                             }} 
-                                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
+                                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${showHeatmap ? 'bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                                             title="Тепловая карта / ADPI"
+                                            aria-label="Тепловая карта / ADPI"
                                         >
                                             {visualizationMode === 'adpi' && showHeatmap ? <Activity size={18}/> : <Thermometer size={18} />}
                                         </button>
                                     </>
                                 )}
-                                 <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт"><Download size={18} /></button>
+                                 <button onClick={handleExport} className={`w-11 h-11 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500 text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5`} title="Экспорт" aria-label="Экспорт"><Download size={18} /></button>
                             </>
                         ) : null}
 
                         <div className="w-px h-6 bg-black/10 dark:bg-white/10 mx-1"></div>
                         <button 
                             onClick={toggleHelp} 
-                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all ${isHelpMode ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`} 
+                            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${isHelpMode ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30' : 'text-slate-500 hover:text-black dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'}`}
                             title="Справка"
+                            aria-label="Справка"
                         >
                             <CircleHelp size={18} />
                         </button>
