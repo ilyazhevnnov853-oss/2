@@ -78,7 +78,7 @@ export const GlassButton = ({ onClick, icon, label, active, secondary, customCla
 };
 
 // --- LIQUID SLIDER (THICK TUBE STYLE) ---
-export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, gradient, color }: any) => {
+export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, gradient, color, ariaLabel }: any) => {
     const pct = ((val - min) / (max - min)) * 100;
     
     let dynGrad = gradient || 'from-blue-600 via-blue-400 to-cyan-300';
@@ -114,6 +114,7 @@ export const GlassSlider = ({ label, icon, val, min, max, step, unit, onChange, 
                     type="range" min={min} max={max} step={step} value={val} 
                     onChange={e => onChange(Number(e.target.value))} 
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    aria-label={ariaLabel || label}
                 />
                 
                 {/* Handle (Glowing Orb) */}
