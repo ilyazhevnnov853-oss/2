@@ -1,0 +1,3 @@
+## 2025-12-16 - Accessible Inputs in Visualization Tools
+**Learning:** In "visualization" heavy tools (like calculators with sliders), developers often forget that visual labels next to sliders don't automatically associate with the input for screen readers. Additionally, replacing static text displays with inputs (even if sliders are the primary control) significantly improves usability for power users who know the exact value they want.
+**Action:** When auditing "interactive dashboards", always check if the "readout" values are editable inputs. If not, converting them to inputs paired with the visual sliders is a high-value, low-effort UX win. Also ensure `GlassSlider` type components accept and render `aria-label` on their internal range inputs.

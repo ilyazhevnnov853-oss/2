@@ -110,10 +110,10 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                         
                         <div className="flex items-center gap-4 mb-6">
                             <div className="flex gap-2">
-                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную">
+                                <button onClick={onHome} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="На главную" aria-label="На главную">
                                     <Home size={18} />
                                 </button>
-                                <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад">
+                                <button onClick={onBack} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-slate-400 hover:text-white group" title="Назад" aria-label="Назад">
                                     <ChevronLeft size={18} />
                                 </button>
                             </div>
@@ -163,6 +163,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 value={airflow} 
                                                 onChange={(e) => setAirflow(Math.max(0, Number(e.target.value)))} 
                                                 className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                aria-label="Airflow"
                                             />
                                             <span className="text-[10px] font-bold text-slate-500">м³/ч</span>
                                         </div>
@@ -173,6 +174,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-purple-600 to-indigo-500"
                                         icon={<Wind size={14}/>}
                                         label=""
+                                        ariaLabel="Airflow Slider"
                                     />
                                 </div>
 
@@ -187,6 +189,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                     value={diameter} 
                                                     onChange={(e) => setDiameter(Math.max(10, Number(e.target.value)))} 
                                                     className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                    aria-label="Diameter"
                                                 />
                                                 <span className="text-[10px] font-bold text-slate-500">мм</span>
                                             </div>
@@ -197,6 +200,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                             gradient="from-indigo-500 to-purple-500"
                                             icon={<CircleDot size={14}/>}
                                             label=""
+                                            ariaLabel="Diameter Slider"
                                         />
                                     </div>
                                 ) : (
@@ -204,6 +208,16 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Ширина (A)</span>
+                                                <div className="flex items-baseline gap-1">
+                                                    <input
+                                                        type="number"
+                                                        value={width}
+                                                        onChange={(e) => setWidth(Math.max(100, Number(e.target.value)))}
+                                                        className="bg-transparent text-right text-sm font-bold font-mono text-white outline-none w-16 border-b border-transparent focus:border-white/20 transition-colors"
+                                                        aria-label="Width"
+                                                    />
+                                                    <span className="text-[10px] font-bold text-slate-500">мм</span>
+                                                </div>
                                             </div>
                                             <GlassSlider 
                                                 val={width} min={100} max={2000} step={50} 
@@ -211,11 +225,22 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 gradient="from-indigo-500 to-blue-500"
                                                 icon={<Ruler size={14}/>}
                                                 label=""
+                                                ariaLabel="Width Slider"
                                             />
                                         </div>
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Высота (B)</span>
+                                                <div className="flex items-baseline gap-1">
+                                                    <input
+                                                        type="number"
+                                                        value={height}
+                                                        onChange={(e) => setHeight(Math.max(100, Number(e.target.value)))}
+                                                        className="bg-transparent text-right text-sm font-bold font-mono text-white outline-none w-16 border-b border-transparent focus:border-white/20 transition-colors"
+                                                        aria-label="Height"
+                                                    />
+                                                    <span className="text-[10px] font-bold text-slate-500">мм</span>
+                                                </div>
                                             </div>
                                             <GlassSlider 
                                                 val={height} min={100} max={2000} step={50} 
@@ -223,6 +248,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                                 gradient="from-indigo-500 to-blue-500"
                                                 icon={<Ruler size={14} className="rotate-90"/>}
                                                 label=""
+                                                ariaLabel="Height Slider"
                                             />
                                         </div>
                                     </div>
@@ -236,7 +262,13 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Длина (L)</span>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-lg font-bold font-mono text-white">{length}</span>
+                                            <input
+                                                type="number"
+                                                value={length}
+                                                onChange={(e) => setLength(Math.max(1, Number(e.target.value)))}
+                                                className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                aria-label="Length"
+                                            />
                                             <span className="text-[10px] font-bold text-slate-500">м</span>
                                         </div>
                                     </div>
@@ -246,6 +278,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-blue-500 to-indigo-500"
                                         icon={<Ruler size={14}/>}
                                         label=""
+                                        ariaLabel="Length Slider"
                                     />
                                 </div>
 
@@ -254,7 +287,13 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                     <div className="flex justify-between items-center mb-2">
                                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">КМС (Σζ)</span>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-lg font-bold font-mono text-white">{zeta.toFixed(1)}</span>
+                                            <input
+                                                type="number"
+                                                value={zeta}
+                                                onChange={(e) => setZeta(Math.max(0, Number(e.target.value)))}
+                                                className="bg-transparent text-right text-lg font-bold font-mono text-white outline-none w-24 border-b border-transparent focus:border-white/20 transition-colors"
+                                                aria-label="Local Resistance"
+                                            />
                                             <span className="text-[10px] font-bold text-slate-500">ед.</span>
                                         </div>
                                     </div>
@@ -264,6 +303,7 @@ const PressureLossCalculator = ({ onBack, onHome }: any) => {
                                         gradient="from-purple-500 to-pink-500"
                                         icon={<Activity size={14}/>}
                                         label=""
+                                        ariaLabel="Local Resistance Slider"
                                     />
                                 </div>
                             </div>
