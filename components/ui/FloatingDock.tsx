@@ -16,7 +16,8 @@ const FloatingDock: React.FC<FloatingDockProps> = ({ onHome, onBack, showBack })
         {showBack && onBack && (
           <button 
             onClick={onBack} 
-            className="w-12 h-12 flex items-center justify-center rounded-full text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-all active:scale-95"
+            aria-label="Назад"
+            className="w-12 h-12 flex items-center justify-center rounded-full text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-blue-500 outline-none"
             title="Назад"
           >
             <ChevronLeft size={22} />
@@ -25,7 +26,8 @@ const FloatingDock: React.FC<FloatingDockProps> = ({ onHome, onBack, showBack })
 
         <button 
           onClick={onHome} 
-          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-95 ${!showBack ? 'mx-1' : ''} text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white`}
+          aria-label="На главную"
+          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all active:scale-95 ${!showBack ? 'mx-1' : ''} text-slate-600 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-black dark:hover:text-white focus-visible:ring-2 focus-visible:ring-blue-500 outline-none`}
           title="На главную"
         >
           <Home size={22} />
