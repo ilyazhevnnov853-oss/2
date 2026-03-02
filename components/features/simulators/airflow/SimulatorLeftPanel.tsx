@@ -111,11 +111,11 @@ export const SimulatorLeftPanel = ({
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
                                 <div className="flex gap-2">
-                                     <button onClick={onHome} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
+                                     <button onClick={onHome} aria-label="На главную" className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
                                         <Home size={18} />
                                      </button>
                                      {onBack && (
-                                         <button onClick={onBack} className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
+                                         <button onClick={onBack} aria-label="Назад" className="p-3 lg:p-2.5 rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors border border-black/5 dark:border-white/5 text-slate-500 dark:text-slate-400 hover:text-black dark:hover:text-white group">
                                             <ChevronLeft size={18} />
                                          </button>
                                      )}
@@ -135,7 +135,7 @@ export const SimulatorLeftPanel = ({
                             </div>
 
                             {/* Mobile Close Button */}
-                            <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2 bg-black/5 dark:bg-white/10 rounded-lg text-slate-500 dark:text-slate-400 hover:text-white"><X size={20} /></button>
+                            <button onClick={() => setIsMobileMenuOpen(false)} aria-label="Закрыть меню" className="lg:hidden p-2 bg-black/5 dark:bg-white/10 rounded-lg text-slate-500 dark:text-slate-400 hover:text-white"><X size={20} /></button>
                         </div>
                     </div>
 
